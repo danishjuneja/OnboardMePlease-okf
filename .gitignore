@@ -1,0 +1,31 @@
+# Local credentials and configuration
+.env
+.env.*
+!.env.example
+!testdata/mixed-monolith/deploy/.env.synthetic
+*.pem
+*.p12
+*.pfx
+*.key
+secrets/
+
+# Local state and generated results
+data/
+work/
+.cache/
+*.db
+*.sqlite
+*.sqlite3
+*.log
+coverage/
+dist/
+build/
+node_modules/
+__pycache__/
+*.pyc
+
+# Editor and OS files
+.idea/
+.vscode/
+.DS_Store
+Thumbs.db

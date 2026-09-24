@@ -1,0 +1,347 @@
+openapi: 3.1.0
+info:
+  title: OnboardMePlease API
+  version: 0.2.0
+  description: >-
+    Phase 2 capture, indexing, evidence, search, and graph endpoints are implemented.
+    Overview, questions, deletion, and knowledge export paths remain planned.
+servers:
+  - url: http://127.0.0.1:8765
+    description: Loopback default for the local single-user service.
+paths:
+  /v1/repositories:
+    get:
+      operationId: listRepositories
+      summary: List recent public GitHub snapshots
+      responses:
+        '200': { description: Recent repositories }
+    post:
+      operationId: addRepository
+      summary: Validate input and queue an immutable snapshot/index job
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '../contracts/repository.schema.json#/$defs/RepositoryInput'
+      responses:
+        '202':
+          description: Repository accepted for analysis
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/JobAccepted'
+        '400': { $ref: '#/components/responses/Problem' }
+        '403': { $ref: '#/components/responses/Problem' }
+  /v1/repositories/{repositoryId}:
+    delete:
+      operationId: deleteRepository
+      summary: Request deletion of repository data and derived indexes
+      parameters:
+        - $ref: '#/components/parameters/RepositoryId'
+      responses:
+        '202':
+          description: Deletion queued, including cache invalidation
+        '403': { $ref: '#/components/responses/Problem' }
+        '404': { $ref: '#/components/responses/Problem' }
+  /v1/repositories/{repositoryId}/snapshots:
+    post:
+      operationId: createSnapshot
+      summary: Reindex a selected GitHub commit
+      parameters:
+        - $ref: '#/components/parameters/RepositoryId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              properties:
+                ref:
+                  type: string
+      responses:
+        '202':
+          description: Snapshot capture queued
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/JobAccepted' }
+        '403': { $ref: '#/components/responses/Problem' }
+  /v1/repositories/{repositoryId}/snapshots/{snapshotId}:
+    get:
+      operationId: getSnapshot
+      summary: Read snapshot identity and state
+      parameters:
+        - $ref: '#/components/parameters/RepositoryId'
+        - $ref: '#/components/parameters/SnapshotId'
+      responses:
+        '200':
+          description: Snapshot metadata
+          content:
+            application/json:
+              schema: { $ref: '../contracts/repository.schema.json#/$defs/Snapshot' }
+        '403': { $ref: '#/components/responses/Problem' }
+        '404': { $ref: '#/components/responses/Problem' }
+  /v1/repositories/{repositoryId}/snapshots/{snapshotId}/coverage:
+    get:
+      operationId: getCoverage
+      summary: Read inventory status counts
+      parameters:
+        - $ref: '#/components/parameters/RepositoryId'
+        - $ref: '#/components/parameters/SnapshotId'
+      responses:
+        '200':
+          description: Snapshot coverage
+          content:
+            application/json:
+              schema: { $ref: '../contracts/repository.schema.json#/$defs/Coverage' }
+        '403': { $ref: '#/components/responses/Problem' }
+  /v1/repositories/{repositoryId}/snapshots/{snapshotId}/index:
+    post:
+      operationId: indexSnapshot
+      summary: Reindex an existing ready GitHub snapshot
+      parameters:
+        - $ref: '#/components/parameters/RepositoryId'
+        - $ref: '#/components/parameters/SnapshotId'
+      responses:
+        '202': { description: Durable indexing job queued }
+        '404': { $ref: '#/components/responses/Problem' }
+  /v1/repositories/{repositoryId}/snapshots/{snapshotId}/search:
+    get:
+      operationId: searchEvidence
+      summary: Scoped exact/lexical or explicitly selected semantic retrieval
+      parameters:
+        - $ref: '#/components/parameters/RepositoryId'
+        - $ref: '#/components/parameters/SnapshotId'
+        - name: q
+          in: query
+          required: true
+          schema: { type: string, minLength: 1, maxLength: 200 }
+        - name: mode
+          in: query
+          schema: { enum: [lexical, semantic] }
+        - name: provider
+          in: query
+          schema: { enum: [local, cloud] }
+      responses:
+        '200': { description: Snapshot-scoped source chunks with ranges }
+        '422': { $ref: '#/components/responses/Problem' }
+  /v1/repositories/{repositoryId}/snapshots/{snapshotId}/capabilities:
+    get:
+      operationId: getCapabilities
+      summary: Per-artifact analysis capabilities and gaps
+      parameters:
+        - $ref: '#/components/parameters/RepositoryId'
+        - $ref: '#/components/parameters/SnapshotId'
+      responses:
+        '200': { description: Artifact capability records }
+  /v1/repositories/{repositoryId}/snapshots/{snapshotId}/symbols:
+    get:
+      operationId: getSymbols
+      summary: Snapshot-scoped extracted or SCIP-imported symbols
+      parameters:
+        - $ref: '#/components/parameters/RepositoryId'
+        - $ref: '#/components/parameters/SnapshotId'
+      responses:
+        '200': { description: Symbols and source ranges }
+  /v1/repositories/{repositoryId}/snapshots/{snapshotId}/graph:
+    get:
+      operationId: getGraph
+      summary: Bounded typed relation traversal from one symbol
+      parameters:
+        - $ref: '#/components/parameters/RepositoryId'
+        - $ref: '#/components/parameters/SnapshotId'
+        - name: symbol_id
+          in: query
+          required: true
+          schema: { type: string }
+      responses:
+        '200': { description: Nodes, edges, limits, and truncation flag }
+  /v1/repositories/{repositoryId}/snapshots/{snapshotId}/scip:
+    post:
+      operationId: importSCIP
+      summary: Import matching SCIP semantic evidence
+      parameters:
+        - $ref: '#/components/parameters/RepositoryId'
+        - $ref: '#/components/parameters/SnapshotId'
+      requestBody:
+        required: true
+        content:
+          application/octet-stream:
+            schema: { type: string, format: binary }
+      responses:
+        '200': { description: Imported and skipped document counts }
+        '422': { $ref: '#/components/responses/Problem' }
+  /v1/repositories/{repositoryId}/snapshots/{snapshotId}/embeddings:
+    post:
+      operationId: queueEmbeddings
+      summary: Explicitly queue local or opted-in cloud embeddings
+      parameters:
+        - $ref: '#/components/parameters/RepositoryId'
+        - $ref: '#/components/parameters/SnapshotId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [provider]
+              properties:
+                provider: { enum: [local, cloud] }
+      responses:
+        '202': { description: Durable embedding job queued }
+        '403': { $ref: '#/components/responses/Problem' }
+        '422': { $ref: '#/components/responses/Problem' }
+  /v1/repositories/{repositoryId}/snapshots/{snapshotId}/overview:
+    get:
+      operationId: getOverview
+      summary: Read the current technical onboarding overview
+      parameters:
+        - $ref: '#/components/parameters/RepositoryId'
+        - $ref: '#/components/parameters/SnapshotId'
+      responses:
+        '200':
+          description: Overview and limitations
+          content:
+            application/json:
+              schema: { $ref: '../contracts/analysis.schema.json#/$defs/Overview' }
+        '403': { $ref: '#/components/responses/Problem' }
+        '404': { $ref: '#/components/responses/Problem' }
+  /v1/repositories/{repositoryId}/snapshots/{snapshotId}/questions:
+    post:
+      operationId: askQuestion
+      summary: Ask a scoped technical question
+      parameters:
+        - $ref: '#/components/parameters/RepositoryId'
+        - $ref: '#/components/parameters/SnapshotId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [question]
+              properties:
+                question: { type: string, minLength: 1, maxLength: 12000 }
+                conversation_id: { type: string }
+                selected_component_ids:
+                  type: array
+                  items: { type: string }
+      responses:
+        '202':
+          description: Answer job queued
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/JobAccepted' }
+        '403': { $ref: '#/components/responses/Problem' }
+        '422': { $ref: '#/components/responses/Problem' }
+  /v1/repositories/{repositoryId}/snapshots/{snapshotId}/evidence/{evidenceId}:
+    get:
+      operationId: getEvidence
+      summary: Resolve an authorized citation to sanitized source lines
+      parameters:
+        - $ref: '#/components/parameters/RepositoryId'
+        - $ref: '#/components/parameters/SnapshotId'
+        - name: evidenceId
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        '200':
+          description: Sanitized evidence; never raw excluded secret content
+          content:
+            application/json:
+              schema: { $ref: '../contracts/evidence.schema.json#/$defs/Evidence' }
+        '403': { $ref: '#/components/responses/Problem' }
+        '404': { $ref: '#/components/responses/Problem' }
+  /v1/repositories/{repositoryId}/snapshots/{snapshotId}/knowledge/export:
+    post:
+      operationId: exportKnowledge
+      summary: Validate and prepare a sanitized OKF bundle
+      parameters:
+        - $ref: '#/components/parameters/RepositoryId'
+        - $ref: '#/components/parameters/SnapshotId'
+      responses:
+        '202':
+          description: Export validation job queued
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/JobAccepted' }
+        '403': { $ref: '#/components/responses/Problem' }
+  /v1/jobs/{jobId}:
+    get:
+      operationId: getJob
+      summary: Read progress, partial failures, and result ID
+      parameters:
+        - $ref: '#/components/parameters/JobId'
+      responses:
+        '200':
+          description: Job state
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Job' }
+        '403': { $ref: '#/components/responses/Problem' }
+  /v1/jobs/{jobId}/events:
+    get:
+      operationId: streamJobEvents
+      summary: Stream progress for an authorized job
+      parameters:
+        - $ref: '#/components/parameters/JobId'
+      responses:
+        '200':
+          description: Server-sent events; payloads contain counts and state, not code or secrets
+          content:
+            text/event-stream:
+              schema: { type: string }
+        '403': { $ref: '#/components/responses/Problem' }
+components:
+  parameters:
+    RepositoryId:
+      name: repositoryId
+      in: path
+      required: true
+      schema: { type: string, minLength: 1 }
+    SnapshotId:
+      name: snapshotId
+      in: path
+      required: true
+      schema: { type: string, minLength: 1 }
+    JobId:
+      name: jobId
+      in: path
+      required: true
+      schema: { type: string, minLength: 1 }
+  schemas:
+    JobAccepted:
+      type: object
+      additionalProperties: false
+      required: [job_id, state]
+      properties:
+        job_id: { type: string }
+        state: { const: queued }
+        repository_id: { type: string }
+        snapshot_id: { type: string }
+    Job:
+      type: object
+      additionalProperties: false
+      required: [job_id, kind, state]
+      properties:
+        job_id: { type: string }
+        kind: { enum: [ingest_snapshot, embed_snapshot] }
+        state: { type: string, description: River job state }
+    Problem:
+      type: object
+      additionalProperties: false
+      required: [code, message]
+      properties:
+        code: { type: string }
+        message: { type: string }
+        request_id: { type: string }
+  responses:
+    Problem:
+      description: Safe error without raw input, code, path, or credential value
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Problem' }

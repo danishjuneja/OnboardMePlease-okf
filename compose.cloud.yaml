@@ -1,0 +1,14 @@
+# Opt-in overlay. Requires secrets/openai_api_key.txt and per-repository
+# cloud_opt_in selection before any source text can reach the provider.
+services:
+  app:
+    environment:
+      MODEL_MODE: cloud_opt_in
+      OPENAI_API_KEY_FILE: /run/secrets/openai_api_key
+    secrets:
+      - postgres_password
+      - openai_api_key
+
+secrets:
+  openai_api_key:
+    file: ./secrets/openai_api_key.txt

@@ -1,0 +1,69 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://onboardmeplease.local/contracts/evidence.schema.json",
+  "title": "Source evidence and typed relations",
+  "$defs": {
+    "SourceRange": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["artifact_id", "start_line", "end_line"],
+      "properties": {
+        "artifact_id": { "type": "string", "minLength": 1 },
+        "start_line": { "type": "integer", "minimum": 1 },
+        "end_line": { "type": "integer", "minimum": 1 }
+      },
+      "description": "Application validation also checks end_line >= start_line and that the range exists in the snapshot"
+    },
+    "Evidence": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["evidence_id", "repository_id", "snapshot_id", "source_kind", "source_ranges", "extractor_id", "resolution", "sanitized"],
+      "properties": {
+        "evidence_id": { "type": "string", "minLength": 1 },
+        "repository_id": { "type": "string", "minLength": 1 },
+        "snapshot_id": { "type": "string", "minLength": 1 },
+        "source_kind": { "enum": ["code", "test", "configuration", "deployment", "documentation", "runtime_observation"] },
+        "source_ranges": { "type": "array", "items": { "$ref": "#/$defs/SourceRange" }, "minItems": 1 },
+        "extractor_id": { "type": "string", "minLength": 1 },
+        "extractor_version": { "type": "string" },
+        "resolution": { "enum": ["resolved", "heuristic", "proposed"] },
+        "sanitized": { "const": true },
+        "snippet": { "type": "string" },
+        "profile_ids": { "type": "array", "items": { "type": "string" }, "uniqueItems": true },
+        "observation_id": { "type": "string", "description": "Required by application policy for runtime observations" }
+      }
+    },
+    "Symbol": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["symbol_id", "snapshot_id", "language", "qualified_name", "kind", "definition_evidence_id"],
+      "properties": {
+        "symbol_id": { "type": "string", "minLength": 1 },
+        "snapshot_id": { "type": "string", "minLength": 1 },
+        "language": { "type": "string", "minLength": 1 },
+        "qualified_name": { "type": "string", "minLength": 1 },
+        "kind": { "enum": ["function", "method", "class", "type", "variable", "module", "route", "other"] },
+        "definition_evidence_id": { "type": "string", "minLength": 1 },
+        "external_key": { "type": "string", "description": "For imported semantic indexes; never sole identity" }
+      }
+    },
+    "Relation": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["relation_id", "snapshot_id", "from_id", "to_id", "kind", "resolution", "evidence_ids", "extractor_id"],
+      "properties": {
+        "relation_id": { "type": "string", "minLength": 1 },
+        "snapshot_id": { "type": "string", "minLength": 1 },
+        "from_id": { "type": "string", "minLength": 1 },
+        "to_id": { "type": "string", "minLength": 1 },
+        "kind": { "enum": ["defines", "references", "calls", "implements", "routes_to", "reads", "writes", "publishes", "subscribes", "configured_by", "supported_by", "derived_from"] },
+        "resolution": { "enum": ["resolved", "heuristic", "proposed"] },
+        "evidence_ids": { "type": "array", "items": { "type": "string", "minLength": 1 }, "uniqueItems": true },
+        "extractor_id": { "type": "string", "minLength": 1 },
+        "profile_ids": { "type": "array", "items": { "type": "string" }, "uniqueItems": true },
+        "conditions": { "type": "array", "items": { "type": "string" } }
+      },
+      "description": "Model-proposed relations remain proposed until an independent extractor resolves them"
+    }
+  }
+}

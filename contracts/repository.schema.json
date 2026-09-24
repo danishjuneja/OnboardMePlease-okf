@@ -1,0 +1,81 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://onboardmeplease.local/contracts/repository.schema.json",
+  "title": "Repository and snapshot contracts",
+  "$defs": {
+    "RepositoryInput": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["kind", "url", "privacy_mode"],
+      "properties": {
+        "kind": { "const": "github" },
+        "url": { "type": "string", "format": "uri", "pattern": "^https://github\\.com/[^/]+/[^/]+/?$" },
+        "ref": { "type": "string", "minLength": 1 },
+        "privacy_mode": { "$ref": "#/$defs/PrivacyMode" }
+      }
+    },
+    "PrivacyMode": { "enum": ["strict_local", "cloud_opt_in"] },
+    "Snapshot": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["repository_id", "snapshot_id", "source_kind", "privacy_mode", "captured_at", "manifest_hash", "state"],
+      "properties": {
+        "repository_id": { "type": "string", "minLength": 1 },
+        "snapshot_id": { "type": "string", "minLength": 1 },
+        "source_kind": { "enum": ["commit", "working_tree"], "description": "working_tree is retained only for historical snapshots created before local input was removed" },
+        "commit_oid": { "type": ["string", "null"] },
+        "privacy_mode": { "$ref": "#/$defs/PrivacyMode" },
+        "captured_at": { "type": "string", "format": "date-time" },
+        "manifest_hash": { "type": "string", "minLength": 1 },
+        "state": { "enum": ["capturing", "partial", "ready", "failed", "superseded"] },
+        "capture_warning_codes": { "type": "array", "items": { "type": "string" }, "uniqueItems": true }
+      },
+      "allOf": [
+        {
+          "if": { "properties": { "source_kind": { "const": "commit" } } },
+          "then": { "required": ["commit_oid"], "properties": { "commit_oid": { "type": "string", "minLength": 1 } } }
+        }
+      ]
+    },
+    "Artifact": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["artifact_id", "snapshot_id", "path", "content_hash", "byte_size", "status", "reason_codes"],
+      "properties": {
+        "artifact_id": { "type": "string", "minLength": 1 },
+        "snapshot_id": { "type": "string", "minLength": 1 },
+        "path": { "type": "string", "minLength": 1, "description": "Normalized path relative to repository root; no parent traversal" },
+        "content_hash": { "type": "string", "minLength": 1 },
+        "byte_size": { "type": "integer", "minimum": 0 },
+        "language": { "type": ["string", "null"] },
+        "role": { "enum": ["application", "test", "example", "configuration", "deployment", "generated", "vendored", "documentation", "unknown"] },
+        "status": { "enum": ["analyzed", "excluded", "unsupported", "failed", "pending"] },
+        "reason_codes": { "type": "array", "items": { "type": "string" }, "uniqueItems": true },
+        "capability_levels": { "type": "array", "items": { "enum": ["text", "syntax", "semantic", "framework", "runtime"] }, "uniqueItems": true }
+      }
+    },
+    "Coverage": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["snapshot_id", "inventory_count", "status_counts", "unresolved_relation_count"],
+      "properties": {
+        "snapshot_id": { "type": "string", "minLength": 1 },
+        "inventory_count": { "type": "integer", "minimum": 0 },
+        "status_counts": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["analyzed", "excluded", "unsupported", "failed", "pending"],
+          "properties": {
+            "analyzed": { "type": "integer", "minimum": 0 },
+            "excluded": { "type": "integer", "minimum": 0 },
+            "unsupported": { "type": "integer", "minimum": 0 },
+            "failed": { "type": "integer", "minimum": 0 },
+            "pending": { "type": "integer", "minimum": 0 }
+          }
+        },
+        "unresolved_relation_count": { "type": "integer", "minimum": 0 },
+        "limitations": { "type": "array", "items": { "type": "string" } }
+      }
+    }
+  }
+}

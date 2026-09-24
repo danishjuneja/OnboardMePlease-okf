@@ -1,0 +1,13 @@
+services:
+  api:
+    build: ../server
+    environment:
+      REFUND_TOPIC: refund.requested
+    ports:
+      - "8080:8080"
+  worker:
+    build: ../worker
+    environment:
+      REFUND_TOPIC: refund.requested
+  db:
+    image: postgres:16
