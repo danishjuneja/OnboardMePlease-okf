@@ -1,8 +1,9 @@
 import { FormEvent, useEffect, useState } from 'react'
+import KnowledgeChat from './KnowledgeChat'
 
-type Session = { csrf_token: string; model_mode: 'strict_local' | 'cloud_opt_in'; embedding_providers: string[]; phase: number }
+type Session = { generation_available: boolean; generation_provider: string; generation_model: string; csrf_token: string; model_mode: 'strict_local' | 'cloud_opt_in'; embedding_providers: string[]; phase: number }
 type Queued = { repository_id: string; snapshot_id: string; job_id: string; state: string }
-type Job = { job_id: number; kind: string; state: string }
+type Job = { failure?: string; job_id: number; kind: string; state: string }
 type Coverage = { snapshot_id: string; inventory_count: number; status_counts: Record<string, number> }
 type Repository = { repository_id: string; url: string; snapshot_id: string; state: string; commit_oid: string | null }
 type SearchResult = { evidence_id: string; path: string; start_line: number; end_line: number; language: string; snippet: string }
@@ -10,6 +11,12 @@ type Evidence = { evidence_id: string; source_ranges: { artifact_id: string; sta
 type Symbol = { symbol_id: string; path: string; name: string; qualified_name: string; kind: string; start_line: number }
 type Graph = { nodes: Symbol[]; edges: { from_id: string; to_id: string; kind: string; resolution: string; path: string; line: number }[]; truncated: boolean }
 type SCIPReport = { imported_documents: number; skipped_documents: number; symbols: number; relations: number }
+type OverviewClaim = { assumption?: string; claim_id: string; text: string; kind: string; evidence_ids: string[]; support_status: string }
+type OverviewSection = { kind: string; title: string; claim_ids: string[] }
+type OverviewNote = { id: number; claim_id: string; note: string; orphaned: boolean }
+type Overview = { snapshot_id: string; commit_oid: string; state: 'ready' | 'partial' | 'stale' | 'evidence_only'; synthesis?: { reviewed_chunks: number; total_chunks: number; reviewed_units: number; total_units: number; model: string }; concepts?: OverviewSection[]; version: number; generated_at: string; sections: OverviewSection[]; claims: OverviewClaim[];
+  limitations: { code: string; message: string }[]; inventory: { total: number; statuses: Record<string, number>; categories: Record<string, number>; unclassified: number }; notes: OverviewNote[] }
+type InventoryItem = { path: string; status: string; reason_codes: string[]; category: string }
 
 async function json<T>(response: Response): Promise<T> {
   const value = await response.json()
@@ -38,6 +45,11 @@ export default function App() {
   const [graph, setGraph] = useState<Graph | null>(null)
   const [scipFile, setScipFile] = useState<File | null>(null)
   const [scipReport, setScipReport] = useState<SCIPReport | null>(null)
+  const [overview, setOverview] = useState<Overview | null>(null)
+  const [inventoryItems, setInventoryItems] = useState<InventoryItem[]>([])
+  const [inventoryOffset, setInventoryOffset] = useState(0)
+  const [noteClaim, setNoteClaim] = useState('')
+  const [noteText, setNoteText] = useState('')
   const [error, setError] = useState('')
 
   async function refreshRepositories() {
@@ -47,12 +59,26 @@ export default function App() {
   }
 
   async function selectRepository(repository: Repository) {
-    setActive(repository); setCoverage(null); setResults([]); setSearched(false); setEvidence(null); setSymbols([]); setGraph(null); setScipReport(null); setScipFile(null); setError('')
+    setActive(repository); setCoverage(null); setOverview(null); setInventoryItems([]); setInventoryOffset(0); setNoteClaim(''); setNoteText(''); setResults([]); setSearched(false); setEvidence(null); setSymbols([]); setGraph(null); setScipReport(null); setScipFile(null); setError('')
     if (repository.state === 'ready') {
       try {
-        const response = await fetch(`/v1/repositories/${repository.repository_id}/snapshots/${repository.snapshot_id}/coverage`, { credentials: 'same-origin' })
-        setCoverage(await json<Coverage>(response))
-      } catch (cause) { setError(cause instanceof Error ? cause.message : 'Coverage unavailable') }
+        const base = `/v1/repositories/${repository.repository_id}/snapshots/${repository.snapshot_id}`
+        const [coverageResponse, overviewResponse] = await Promise.all([
+          fetch(`${base}/coverage`, { credentials: 'same-origin' }),
+          fetch(`${base}/overview`, { credentials: 'same-origin' }),
+        ])
+        setCoverage(await json<Coverage>(coverageResponse))
+        setOverview(await json<Overview>(overviewResponse))
+        const analysisResponse = await fetch(`${base}/analysis`, { credentials: 'same-origin' })
+        if (analysisResponse.ok) {
+          const analysis = await analysisResponse.json() as Queued
+          if (analysis.job_id && ['available', 'running', 'retryable', 'scheduled', 'pending'].includes(analysis.state)) setQueued(analysis)
+          else if (analysis.job_id && ['cancelled', 'discarded'].includes(analysis.state)) {
+            const failed = await json<Job>(await fetch(`/v1/jobs/${analysis.job_id}`, { credentials: 'same-origin' }))
+            setError(failed.failure ?? `Analysis ${failed.state}; successful batches are cached. Use Analyze or resume overview to retry.`)
+          }
+        }
+      } catch (cause) { setError(cause instanceof Error ? cause.message : 'Overview unavailable') }
     }
   }
 
@@ -71,12 +97,13 @@ export default function App() {
       setJob(next)
       if (!['completed', 'cancelled', 'discarded'].includes(next.state)) return
       events.close()
-      if (next.state !== 'completed') { setError(`Index job ${next.state}`); return }
+      if (next.state !== 'completed') { setError(next.failure ?? `Background job ${next.state}; successful analysis batches are cached for resume`); return }
       try {
         const prefix = `/v1/repositories/${queued.repository_id}/snapshots/${queued.snapshot_id}`
         const snapshot = await json<{ state: string; commit_oid: string | null }>(await fetch(prefix, { credentials: 'same-origin' }))
         if (snapshot.state !== 'ready') throw new Error(`Snapshot ${snapshot.state}`)
-        await selectRepository({ repository_id: queued.repository_id, snapshot_id: queued.snapshot_id, url: url.trim(), state: snapshot.state, commit_oid: snapshot.commit_oid })
+        const repositoryURL = repositories.find(item => item.repository_id === queued.repository_id)?.url ?? url.trim()
+        await selectRepository({ repository_id: queued.repository_id, snapshot_id: queued.snapshot_id, url: repositoryURL, state: snapshot.state, commit_oid: snapshot.commit_oid })
         await refreshRepositories()
       } catch (cause) { setError(cause instanceof Error ? cause.message : 'Snapshot unavailable') }
     })
@@ -140,6 +167,7 @@ export default function App() {
     try {
       const response = await fetch(`${prefix()}/evidence/${encodeURIComponent(id)}`, { credentials: 'same-origin' })
       setEvidence(await json<Evidence>(response))
+      window.setTimeout(() => document.getElementById('source-view')?.scrollIntoView({ behavior: 'smooth', block: 'center' }), 0)
     } catch (cause) { setError(cause instanceof Error ? cause.message : 'Evidence unavailable') }
   }
 
@@ -168,15 +196,63 @@ export default function App() {
       const response = await fetch(`${prefix()}/scip`, { method: 'POST', credentials: 'same-origin',
         headers: { 'Content-Type': 'application/octet-stream', 'X-CSRF-Token': session.csrf_token }, body: scipFile })
       setScipReport(await json<SCIPReport>(response))
+      setOverview(await json<Overview>(await fetch(`${prefix()}/overview`, { credentials: 'same-origin' })))
     } catch (cause) { setError(cause instanceof Error ? cause.message : 'SCIP import failed') }
   }
 
+  async function loadInventory(offset: number) {
+    if (!active) return
+    setError('')
+    try {
+      const response = await fetch(`${prefix()}/overview/inventory?offset=${offset}&limit=100`, { credentials: 'same-origin' })
+      const data = await json<{ artifacts: InventoryItem[] }>(response)
+      setInventoryItems(data.artifacts); setInventoryOffset(offset)
+    } catch (cause) { setError(cause instanceof Error ? cause.message : 'Inventory unavailable') }
+  }
+
+  async function saveNote() {
+    if (!active || !session || !noteClaim || !noteText.trim()) return
+    setError('')
+    try {
+      const response = await fetch(`${prefix()}/overview/notes`, { method: 'POST', credentials: 'same-origin',
+        headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': session.csrf_token },
+        body: JSON.stringify({ claim_id: noteClaim, note: noteText.trim() }) })
+      await json<OverviewNote>(response)
+      setOverview(await json<Overview>(await fetch(`${prefix()}/overview`, { credentials: 'same-origin' })))
+      setNoteClaim(''); setNoteText('')
+    } catch (cause) { setError(cause instanceof Error ? cause.message : 'Could not save correction') }
+  }
+
+  async function deleteNote(id: number) {
+    if (!active || !session) return
+    setError('')
+    try {
+      const response = await fetch(`${prefix()}/overview/notes/${id}`, { method: 'DELETE', credentials: 'same-origin', headers: { 'X-CSRF-Token': session.csrf_token } })
+      if (!response.ok) { await json(response); return }
+      setOverview(await json<Overview>(await fetch(`${prefix()}/overview`, { credentials: 'same-origin' })))
+    } catch (cause) { setError(cause instanceof Error ? cause.message : 'Could not remove correction') }
+  }
+
+  async function downloadOKF() {
+    if (!active) return
+    setError('')
+    try {
+      const response = await fetch(`${prefix()}/knowledge/export`, { credentials: 'same-origin' })
+      if (!response.ok) { await json(response); return }
+      const blob = await response.blob()
+      const objectURL = URL.createObjectURL(blob)
+      const link = document.createElement('a')
+      link.href = objectURL; link.download = `onboardmeplease-okf-${active.snapshot_id}.zip`
+      document.body.appendChild(link); link.click(); link.remove(); window.setTimeout(() => URL.revokeObjectURL(objectURL), 1000)
+    } catch (cause) { setError(cause instanceof Error ? cause.message : 'OKF export unavailable') }
+  }
+
   return <main className="shell">
-    <header><span className="brand">OnboardMePlease</span><span className="phase">Phase 2 · evidence and search</span></header>
+    <header><span className="brand">OnboardMePlease</span><span className="phase">Repository understanding</span></header>
     <section className="intro">
       <p className="eyebrow">Repository onboarding</p>
       <h1>Explore the code behind the flow.</h1>
-      <p>Capture a public GitHub commit, search its source, and inspect exactly which files and relationships the index can support. The technical overview and chat arrive in later phases.</p>
+      <p>Capture a public GitHub commit, explore its technical overview, and ask questions grounded in source and OKF knowledge.</p>
     </section>
     <section className="panel">
       <h2>Add a GitHub repository</h2>
@@ -187,7 +263,7 @@ export default function App() {
           <option value="strict_local">Strict local</option>
           {session?.model_mode === 'cloud_opt_in' && <option value="cloud_opt_in">Cloud opt-in for this repository</option>}
         </select></label>
-        <p className="hint">Capture fetches public GitHub content. Search runs locally; no model requests are made by this screen.</p>
+        <p className="hint">Capture fetches public GitHub content. A configured model analyzes source after indexing when this repository’s model policy permits it.</p>
         <button className="primary" disabled={!session || !url.trim()}>Capture and index</button>
       </form>
     </section>
@@ -201,6 +277,38 @@ export default function App() {
         <span className="hint">{item.state}{item.commit_oid ? ` · ${item.commit_oid.slice(0, 12)}` : ''}</span>
       </li>)}</ul>}
     </section>
+    {active?.state === 'ready' && session && <KnowledgeChat base={prefix()} session={session} onQueued={setQueued} onEvidence={openEvidence} />}
+    {active && overview && <section className="panel overview"><h2>Technical overview</h2>
+      <p className="hint">Captured commit {overview.commit_oid || 'unavailable'} · overview v{overview.version} · {overview.state} · {overview.synthesis ? 'model-reviewed source' : 'extracted declarations'}</p>
+      <div className="overview-summary"><div><strong>{overview.inventory.total}</strong><span> inventoried artifacts</span></div>
+        <div><strong>{overview.inventory.statuses.analyzed ?? 0}</strong><span> analyzed</span></div>
+        <div><strong>{overview.inventory.unclassified}</strong><span> unclassified</span></div></div>
+      <p className="hint">Inventory counts show indexing coverage. Semantic review coverage is reported separately below.</p>
+      {overview.synthesis ? <p className="hint">Semantically reviewed {overview.synthesis.reviewed_chunks} / {overview.synthesis.total_chunks} chunks across {overview.synthesis.reviewed_units} / {overview.synthesis.total_units} batches · {overview.synthesis.model}</p> : <p className="hint">Source synthesis has not run. These are extracted declarations, not a generated repository explanation.</p>}
+      {overview.sections.map((section) => <details className="overview-section" key={section.kind} open={section.kind === 'purpose' || section.kind === 'runtime'}>
+        <summary><strong>{section.title}</strong><span>{section.claim_ids.length} cited claims</span></summary>
+        {section.claim_ids.length === 0 ? <p className="hint">No supported claim established for this area.</p> : <ul>{section.claim_ids.map((id) => {
+          const claim = overview.claims.find((item) => item.claim_id === id)
+          if (!claim) return null
+          return <li key={id}><p>{claim.kind === 'inference' && <strong>Inferred from source · </strong>}{claim.text}</p>{claim.assumption && <p className="hint">Inference limit: {claim.assumption}</p>}<div className="citation-row">{claim.evidence_ids.map((sourceID) =>
+            <button type="button" className="citation" key={sourceID} onClick={() => openEvidence(sourceID)}>Open source {sourceID.slice(0, 8)}</button>)}
+            <button type="button" className="link-button" onClick={() => { setNoteClaim(id); setNoteText('') }}>Add correction</button></div>
+            {overview.notes.filter((note) => note.claim_id === id && !note.orphaned).map((note) => <p className="review-note" key={note.id}>Local correction: {note.note} <button type="button" className="link-button" onClick={() => deleteNote(note.id)}>Remove</button></p>)}
+          </li>
+        })}</ul>}
+      </details>)}
+      {noteClaim && <div className="note-editor"><label>Correction for claim {noteClaim.slice(0, 8)}<textarea maxLength={2000} value={noteText} onChange={(event) => setNoteText(event.target.value)} placeholder="Describe what should be checked or corrected" /></label>
+        <button type="button" className="secondary" disabled={!noteText.trim()} onClick={saveNote}>Save local correction</button>
+        <button type="button" className="link-button" onClick={() => setNoteClaim('')}>Cancel</button></div>}
+      {overview.notes.some((note) => note.orphaned) && <p className="hint">{overview.notes.filter((note) => note.orphaned).length} saved corrections refer to claims changed by regeneration; they remain in the record.</p>}
+      <h3>Analysis limits</h3><ul>{overview.limitations.map((item) => <li key={item.code + item.message}>{item.message}</li>)}</ul>
+      <div className="overview-actions"><button type="button" className="secondary" onClick={() => loadInventory(0)}>Browse full inventory</button>
+        <button type="button" className="primary" onClick={downloadOKF}>Download OKF bundle</button></div>
+      {inventoryItems.length > 0 && <div className="inventory-page"><h3>Inventory {inventoryOffset + 1}–{inventoryOffset + inventoryItems.length}</h3>
+        <ul>{inventoryItems.map((item) => <li key={item.path}><code>{item.path}</code> · {item.status} · {item.category}{item.reason_codes.length > 0 ? ` · ${item.reason_codes.join(', ')}` : ''}</li>)}</ul>
+        <div className="pagination"><button type="button" className="secondary" disabled={inventoryOffset === 0} onClick={() => loadInventory(Math.max(0, inventoryOffset - 100))}>Previous</button>
+          <button type="button" className="secondary" disabled={inventoryOffset + inventoryItems.length >= overview.inventory.total} onClick={() => loadInventory(inventoryOffset + 100)}>Next</button></div></div>}
+    </section>}
     {active && <section className="panel result"><h2>Snapshot evidence</h2>
       <p className="hint">{active.url.replace(/\.git$/, '')} · {active.snapshot_id}{active.commit_oid ? ` · ${active.commit_oid}` : ''}</p>
       {coverage && <><h3>Inventory coverage</h3><p>{coverage.inventory_count} artifacts accounted for</p>
@@ -224,7 +332,7 @@ export default function App() {
       {results.map((item) => <button type="button" className="search-hit" key={item.evidence_id} onClick={() => openEvidence(item.evidence_id)}>
         <strong>{item.path}:{item.start_line}-{item.end_line}</strong><span>{item.language} · {item.snippet.slice(0, 240)}</span>
       </button>)}
-      {evidence && <div className="source-view"><h3>{evidence.source_ranges[0].artifact_id}:{evidence.source_ranges[0].start_line}-{evidence.source_ranges[0].end_line}</h3>
+      {evidence && <div className="source-view" id="source-view"><h3>{evidence.source_ranges[0].artifact_id}:{evidence.source_ranges[0].start_line}-{evidence.source_ranges[0].end_line}</h3>
         <pre><code>{evidence.snippet.split('\n').map((line, index) => `${evidence.source_ranges[0].start_line + index}  ${line}`).join('\n')}</code></pre>
         <p className="hint">Evidence ID: {evidence.evidence_id}</p></div>}
       <h3>Symbols and relationships</h3>
@@ -242,6 +350,6 @@ export default function App() {
         <button type="button" className="secondary" disabled={!scipFile} onClick={uploadSCIP}>Import SCIP</button></div>
       {scipReport && <p className="hint">Imported {scipReport.imported_documents} documents, skipped {scipReport.skipped_documents}; {scipReport.symbols} symbols and {scipReport.relations} relations.</p>}
     </section>}
-    <footer>Source-backed technical explanations and OKF are scheduled for later phases.</footer>
+    <footer>Explanations are scoped to the captured commit. Open citations to inspect the implementation.</footer>
   </main>
 }

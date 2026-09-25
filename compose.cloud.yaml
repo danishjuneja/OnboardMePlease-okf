@@ -4,6 +4,8 @@ services:
   app:
     environment:
       MODEL_MODE: cloud_opt_in
+      GENERATION_PROVIDER: cloud
+      GENERATION_MODEL: ${GENERATION_MODEL:-gpt-5.4}
       OPENAI_API_KEY_FILE: /run/secrets/openai_api_key
     secrets:
       - postgres_password

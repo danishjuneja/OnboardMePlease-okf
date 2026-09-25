@@ -1,0 +1,13 @@
+Explain how the supplied repository can start and what runtime units its evidence declares.
+Identify each supported launch/deployment profile separately. For each profile describe
+entry points, initialization order only where supported, required configuration names,
+external services, migrations, worker registration, exposed interfaces and startup failures.
+
+Distinguish checked-in defaults from external/environment-dependent values. Never expose
+configuration secrets. Missing deployment files do not prove the project cannot run.
+For a library, describe integration entry points and state that no standalone deployment
+was established. Do not invent infrastructure or successful execution.
+
+Return the shared envelope plus profiles. Each profile contains runtime_unit_ids,
+ordered_steps with evidence and conditions, required_configuration_names, external_dependencies,
+and unresolved_requirements. Indicate when order or runtime selection cannot be resolved.

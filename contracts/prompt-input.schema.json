@@ -1,0 +1,14 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://onboardmeplease.local/contracts/prompt-input.schema.json",
+  "title": "Scoped prompt input envelope",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["repository_id", "snapshot_id", "evidence_ids", "payload"],
+  "properties": {
+    "repository_id": { "type": "string", "minLength": 1 },
+    "snapshot_id": { "type": "string", "minLength": 1 },
+    "evidence_ids": { "type": "array", "items": { "type": "string", "minLength": 1 }, "uniqueItems": true },
+    "payload": { "type": "object" }
+  }
+}

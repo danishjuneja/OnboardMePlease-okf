@@ -46,7 +46,7 @@ func Migrate(ctx context.Context, pool *pgxpool.Pool) error {
 	for _, migration := range []struct {
 		version int
 		file    string
-	}{{1, "migrations/001_foundation.sql"}, {2, "migrations/002_github_only.sql"}, {3, "migrations/003_evidence_search.sql"}, {4, "migrations/004_embeddings.sql"}} {
+	}{{1, "migrations/001_foundation.sql"}, {2, "migrations/002_github_only.sql"}, {3, "migrations/003_evidence_search.sql"}, {4, "migrations/004_embeddings.sql"}, {5, "migrations/005_knowledge.sql"}, {6, "migrations/006_synthesis.sql"}} {
 		var applied bool
 		if err := transaction.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM app_migrations WHERE version=$1)`, migration.version).Scan(&applied); err != nil {
 			return errors.New("cannot inspect application migrations")

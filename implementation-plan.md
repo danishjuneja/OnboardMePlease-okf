@@ -1,11 +1,12 @@
 # Repository Explorer — implementation plan
 
-Status: phased implementation in progress. Phase 0 contracts, the Phase 1 foundation, and a Phase 2 evidence/search implementation are present in this working tree; overview and answer phases remain planned. See [Phase 2 status](docs/phase-2.md).
+Status: original product plan, superseded in implementation order by the [architecture rework](docs/architecture-rework.md). As of 2026-09-25, the core rework connects source synthesis, technical overviews, searchable OKF, bounded retrieval and source-grounded questions. See the [verification record](docs/rework-verification.md) for tested behavior and remaining release limits. The milestones below retain the original scope; their presence does not mean every future release requirement is implemented. The [Phase 3 preview](docs/phase-3.md) is historical.
 
 This plan incorporates the agreed architecture and four release requirements: portable deployment, a complete versioned prompt library, protection of secrets, and reproducible setup documentation. “Repository Explorer” is a working label, not a final product name.
 
 Companion documents:
 
+- [Architecture rework and reference data flow](docs/architecture-rework.md): current scope, implementation gaps, cleanup, and acceptance gates.
 - [Prompt library](docs/prompt-library.md): implementation-agent handoff and runtime prompt templates.
 - [README contract](docs/readme-contract.md): required installation instructions and documentation verification.
 
@@ -30,16 +31,16 @@ The product is language-independent at the data model and retrieval layers, with
 | Parsing | Tree-sitter Go bindings, packaged grammars, isolated worker processes |
 | Semantic analysis | SCIP ingestion and optional language/framework adapters |
 | Persistence | PostgreSQL, pgvector, full-text and exact identifier indexes |
-| Database access | pgx and sqlc; versioned SQL migrations |
+| Database access | Retain pgx and versioned SQL migrations; sqlc adoption is deferred |
 | Durable jobs | River; idempotent stages, retries, cancellation, resumable progress |
 | Graph | Typed node/edge tables in PostgreSQL; bounded traversal in Go |
 | Retrieval | Exact identifiers + lexical + vector search; rank fusion and evidence expansion |
 | Cloud embeddings | text-embedding-3-small, initially 1,536 dimensions |
-| Cloud synthesis | Responses API, configurable gpt-5.4 baseline; no model-specific logic in domain packages |
+| Cloud synthesis | Configured generation provider behind the privacy boundary; model selected against the evaluation fixtures, with no model-specific logic in domain packages |
 | Local models | Provider interface for local generation/embedding endpoints; validated capability handshake |
 | Knowledge | OKF v0.2 bundles, generated from validated structured claims |
-| UI | React, TypeScript, Vite, Tailwind, shadcn/ui, TanStack Query |
-| Diagrams/source | React Flow + ELK; Monaco read-only source viewer |
+| UI | Retain React, TypeScript and Vite; additional UI libraries are deferred until needed |
+| Diagrams/source | Retain the current source viewer; richer diagram/editor libraries require a demonstrated need |
 | Packaging | Container images and Compose first; tested native Go distributions with embedded UI |
 | Verification | Go tests, Vitest, Playwright, fixed repository fixtures and answer evaluations |
 
@@ -216,6 +217,8 @@ CONTRIBUTING.md
 
 ## 11. Milestones and acceptance gates
 
+The milestones below retain the original feature contract. Execute the revised R0-R3 sequence in the [architecture rework](docs/architecture-rework.md) before expanding scope. M3 is not complete: citation presence and valid OKF structure do not establish repository understanding.
+
 ### M0 — contracts and evaluation fixtures
 
 Deliver domain schemas, API contract, prompt registry format, supported deployment matrix, threat/data-flow model, grammar capability matrix, and synthetic repositories. Assemble maintainer-reviewed questions before tuning retrieval. Record architecture decisions.
@@ -238,11 +241,11 @@ Gate: exact source ranges and stable IDs validate; cycle/hub stress tests termin
 
 Deliver component/startup/flow prompts and schemas, repository-wide synthesis, deterministic citation and OKF renderers, overview UI, invalidation and retained human corrections.
 
-Gate: no missing inventory entries in coverage accounting; no invented deployment in a library-only fixture; missing runtime configuration stays unresolved; every published factual claim has a valid evidence reference; OKF passes the pinned specification and secret checks.
+Gate: no missing inventory entries in coverage accounting; source-grounded capability and flow synthesis works without useful README text; scattered files remain discoverable; no invented deployment in a library-only fixture; missing runtime configuration stays unresolved; every material claim is assessed for semantic support as well as citation validity; OKF passes the pinned specification and secret checks and retains source dependencies for subsequent retrieval. A real configured generation provider must pass the quality cases; a deterministic preview or mock provider does not satisfy M3.
 
 ### M4 — interactive investigation
 
-Deliver planning, bounded evidence expansion, support assessment, structured technical answers, follow-up grounding, stream rendering, partial-answer UX and graph navigation.
+Deliver planning, retrieval from both generated knowledge and underlying source evidence, bounded evidence expansion, support assessment, structured technical answers, follow-up grounding, stream rendering, partial-answer UX and graph navigation. Reopen original sources behind knowledge hits before validating answer claims.
 
 Gate: answer suite measures correctness and support, not citation presence alone. Broad questions cannot evade budgets. Chat injection fixtures cannot grant tools, reveal credentials, or switch repositories. Snapshot changes cannot silently reuse stale evidence.
 

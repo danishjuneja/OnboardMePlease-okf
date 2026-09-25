@@ -10,7 +10,9 @@ WORKDIR /source
 COPY go.mod go.sum ./
 RUN go mod download
 COPY cmd/ ./cmd/
+COPY contracts/ ./contracts/
 COPY internal/ ./internal/
+COPY prompts/ ./prompts/
 COPY --from=web-build /source/internal/webui/dist/ ./internal/webui/dist/
 RUN CGO_ENABLED=0 go build -trimpath -ldflags="-s -w" -o /out/onboardmeplease ./cmd/onboardmeplease
 

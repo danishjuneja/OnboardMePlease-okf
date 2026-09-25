@@ -8,25 +8,19 @@ A traditional semantic RAG obviously fails for larger lookups, or cross-module t
 
 ## Implementation status
 
-The project is being built phase by phase. Phase 0 defines the technical behavior, data and API contracts, analysis limits, privacy boundaries, and synthetic evaluation cases. Phase 1 adds a locally runnable GitHub repository-capture service and UI shell. Phase 2 adds source evidence, search, capability reporting, and bounded call graphs.
+The architecture rework connects repository capture, source analysis, an initial technical overview, searchable OKF concepts, and technical questions. Go handles the API, River jobs, retrieval, graph traversal, privacy checks and model calls. React/TypeScript/Vite supplies the UI; PostgreSQL with pgvector stores evidence, knowledge, vectors and conversation history.
 
-- [Phase 0 contracts and exit gate](docs/phase-0.md)
-- [Implementation plan](implementation-plan.md)
-- [Prompt library](docs/prompt-library.md)
-- [Deployment and README requirements](docs/readme-contract.md)
-- [Phase 2 scope and verification](docs/phase-2.md)
+A public GitHub URL is the only repository input. The service captures an immutable commit, scans and indexes readable files, and queues source synthesis when a generation model is configured and repository policy allows it. The overview is produced before questions. Questions search both source and OKF knowledge, reopen the underlying code, expand available static relationships within limits, and assess each proposed claim against source. OKF is also downloadable as a portable bundle.
 
-The planned first release accepts a public GitHub repository URL and will produce a technical onboarding overview before interactive, source-backed questions. Strict local model processing is the default design. Cloning a public repository still requires network access to GitHub; cloud model calls require explicit opt-in and a repository policy.
+Without a model, capture, source search, Go parsing, optional SCIP import, inventory and extracted declarations work locally. They do **not** count as semantic understanding. README headings, filenames and repeated words no longer generate purpose claims. Model assessments can still be wrong; use the source citations and see the [verification record](docs/rework-verification.md).
 
-## Run locally (Phase 2)
+## Run with Docker Compose
 
-The service captures an immutable, scanned repository snapshot, then indexes approved files as citable source chunks. Exact and lexical search, source viewing, Go syntax extraction, capability reporting, and bounded call-graph navigation run without a model or API key. Optional SCIP import adds semantic references only where the index's embedded file text matches the captured commit. Optional vector search requires a separately configured embedding provider. The technical overview, OKF bundle, and interactive answers are still planned for later phases. Baseline prompts for the implementation agent, OKF generation, and interactive answers are in the [prompt library](docs/prompt-library.md); packaging them as a versioned runtime registry remains a later phase.
+Requirements: Git to obtain this tool, Docker with Linux containers, and Docker Compose v2. On Windows use Docker Desktop with its WSL2 backend; on macOS use Docker Desktop; on Linux use Docker Engine with Compose. Runtime verification currently covers Windows with Docker Desktop and the Linux amd64 containers. Other hosts are documented installation targets, not claimed as tested releases.
 
-A capture request creates a repository row, a queued snapshot, and a durable River job. The worker clones one public GitHub commit, inventories and scans its files, writes approved content and a manifest to private storage, then indexes text in PostgreSQL. The UI reads job state and coverage, searches source chunks, opens cited lines, and explores supported Go call links. `analyzed` means searchable text, not complete technical understanding. `pending` means capture has not yet been indexed; `completed` means that job finished, including its index step. Each search is scoped to one repository snapshot. Graph traversal uses visited nodes and fixed limits, and reports truncation.
+Clone this tool and open a terminal in its root. On a **new installation only**, create the database password file. Do not overwrite an existing password: the persistent database already uses it.
 
-The easiest route is Docker Desktop with Linux containers and WSL2 on Windows, or Docker Engine with Compose on Linux and macOS. Docker must be running. The app is published only at `127.0.0.1:8765`; this is a single-user local setup, not a remote server configuration. Docker images are built from the checked-in Dockerfile. GitHub URLs are cloned by the backend into its private data volume. Use GitHub repositories that are public and do not require credentials. The service does not accept local repository paths or mount host repositories.
-
-From the project root, create the Compose database password file. It is ignored by Git and by the Docker build context. On Linux/macOS:
+Linux/macOS:
 
 ```sh
 umask 077
@@ -36,7 +30,7 @@ docker compose up --build -d
 docker compose ps
 ```
 
-On Windows PowerShell:
+Windows PowerShell:
 
 ```powershell
 New-Item -ItemType Directory -Force secrets | Out-Null
@@ -47,27 +41,67 @@ docker compose up --build -d
 docker compose ps
 ```
 
-Open [http://127.0.0.1:8765](http://127.0.0.1:8765). The `doctor` command checks Git, the writable data directory, and pgvector; `docker compose exec app /app/onboardmeplease doctor` runs it in the container. `docker compose logs app` shows startup or migration failures without dumping repository content or passwords. To stop and resume while preserving jobs and snapshots, use `docker compose stop` then `docker compose start`. Do not use `docker compose down -v` unless you intend to delete both persistent volumes.
+Open [OnboardMePlease](http://127.0.0.1:8765). The application is a local, single-user service bound to loopback. It is not ready for exposure as a shared Internet service. Git is included in the image; capture does not depend on Git or credentials on the host. Only public, credential-free GitHub repositories are accepted; repository scripts are never executed.
 
-For a no-key smoke test, enter `https://github.com/octocat/Hello-World` in the UI. The completed job should show a nonzero inventory with readable source files marked `analyzed`. Open the snapshot from Recent repositories and search for `Hello`; the result opens its source lines. You can select a branch or tag, or leave the ref empty to capture the default branch's current commit. Only credential-free `https://github.com/owner/repo` URLs are accepted.
+## Enable API-key-backed analysis and chat
 
-On PowerShell, `./scripts/smoke_phase1.ps1` captures and indexes that public repository through the API. To verify durability, run `docker compose restart database` followed by `./scripts/check_phase1_persistence.ps1`. The scripts save only job IDs, snapshot IDs, hashes, and coverage counts under the ignored `work` directory.
+Create `secrets/openai_api_key.txt` in a local editor and place your OpenAI API key in it, without quotes. Do not paste the key in chat, source files, the browser, command arguments or screenshots. This directory is excluded from Git and Docker build context; Compose mounts the file into the backend at runtime. Restrict its filesystem permissions to your user. The API project needs usable billing/quota; a ChatGPT subscription does not configure this API credential.
 
-For native development, install Go 1.27.1, Node 24.21.0, Git, and PostgreSQL 17 with pgvector 0.8.6. Build the embedded UI first, then the Go binary:
+The cloud profile uses OpenAI Responses for generation and `text-embedding-3-small` for optional embeddings. The generation model must support structured JSON outputs. The tested default is `gpt-5.4`; `GENERATION_MODEL` can override it. Example, after saving the key:
 
 ```sh
-cd web && npm ci && npm run build && cd ..
-go build -o onboardmeplease ./cmd/onboardmeplease
+docker compose -f compose.yaml -f compose.cloud.yaml up --build -d
 ```
 
-Set `DATABASE_URL` to a PostgreSQL connection string. Prefer `DATABASE_URL_FILE` or `DATABASE_PASSWORD_FILE` for protected credentials. `APP_DATA_DIR` chooses snapshot storage; the platform user config directory is used by default. Run `./onboardmeplease doctor`, `./onboardmeplease migrate`, then `./onboardmeplease serve` on POSIX systems, or `./onboardmeplease.exe` with the same subcommands on Windows. The native app binds `127.0.0.1:8765` by default. A native build is source-buildable; release binaries and an OS verification matrix are not published yet.
+Select **Cloud opt-in for this repository** when capturing a repository. For an existing snapshot, select it under Recent repositories, check its cloud permission box, and choose **Analyze or resume overview**. This saves the repository's opt-in. Merely mounting a key does not authorize sending every stored repository to the cloud. Source excerpts, derived knowledge and questions may be sent for opted-in repositories. Generation sets `store: false`; this is not a claim about the provider's broader retention policy.
 
-The snapshot inventory reads files from one resolved Git commit, so later branch changes do not alter a captured snapshot. Secret-like files and detected secret content are excluded; symlinks, submodules, LFS pointers, binaries, and files larger than 2 MiB are listed as unsupported rather than silently analyzed. Capture never runs repository build scripts or hooks. Secret scanning is conservative and cannot prove arbitrary text is secret-free. The default installation sends no repository content to a model.
+A capture queues analysis automatically when its policy permits it. Large repositories require additional **Analyze or resume overview** runs. Successful batches are cached; restarting or retrying does not repeat those batches with the same source, prompt and model. The UI separates indexed-file counts from reviewed-chunk counts, shows partial results and links every claim to source.
 
-Large GitHub clones and scans can take time. `APP_CAPTURE_TIMEOUT` defaults to `2h` and accepts `1m` through `24h`; set it in the ignored `.env` file and recreate the app container if needed.
+Use **Ask** for technical questions and follow-ups. Answers persist per snapshot. **Start a new question** clears conversational references; **Follow up on this answer** selects a previous turn. Prior answers never count as evidence. **Index semantic vectors** embeds at most 250 missing source chunks and 100 current concepts per run; repeat for larger snapshots. Exact/lexical search and knowledge retrieval also work without vectors. The answer pipeline reports unavailable vectors; when embedding is incomplete, it searches the vectors already present alongside exact/lexical candidates.
 
-Run `go test ./...` for backend and snapshot checks, `cd web && npm run build` for the UI, and `python scripts/check_phase0.py` for the design contracts (Python 3.11+ and PyYAML 6.0.3). [Phase 2 scope and verification](docs/phase-2.md) records what is implemented and what remains unverified. For secrets, report a sanitized reproduction; do not paste real credentials or private source into an issue.
+To use another model, set `GENERATION_MODEL` before running the same Compose command. In PowerShell use `$env:GENERATION_MODEL='your-model-id'`; in a POSIX shell use `export GENERATION_MODEL='your-model-id'`. The API key is separate from the endpoint URL. This implementation supports OpenAI cloud generation and a local OpenAI-compatible endpoint; Anthropic and arbitrary cloud endpoints are not implemented.
 
-Optional embeddings require an explicit provider and an explicit indexing action in the UI. The default Compose profile has none. For a native service with a loopback embedding endpoint, set `LOCAL_EMBEDDING_URL`, `LOCAL_EMBEDDING_MODEL`, and `LOCAL_EMBEDDING_DIMENSIONS` in the service environment before starting it; the endpoint must accept the OpenAI-compatible embeddings request shape and return the configured number of floats. A provider error never selects cloud as a fallback. The local endpoint must be reachable from the backend process; a host loopback address is not a container loopback address.
+## Local models and native development
 
-Cloud embeddings use `text-embedding-3-small` with 1,536 dimensions and are opt-in at both installation and repository level. To enable the Compose overlay, place your key in the Git-ignored `secrets/openai_api_key.txt` using a protected editor, then start with `docker compose -f compose.yaml -f compose.cloud.yaml up --build -d`. Choose **Cloud opt-in** for a repository and then explicitly select **Index semantic vectors**. This sends approved source chunks to OpenAI's embeddings endpoint. Do not put a key in `.env`, the URL, browser code, or a command argument. Provider data controls can change; see the [official OpenAI documentation](https://developers.openai.com/api/docs/guides/your-data). No cloud call is required for capture, lexical search, SCIP import, or graph navigation.
+Strict-local mode remains the default and never falls back to cloud. Native generation settings are `GENERATION_PROVIDER=local`, `GENERATION_MODEL`, and `LOCAL_GENERATION_URL` pointing to the complete `/v1/chat/completions` URL on a loopback IP. The local server must implement the strict `response_format.json_schema` contract and return JSON with a `stop` finish reason. Local provider compatibility has been checked with HTTP fixtures, not every model server.
+
+Optional local embedding settings are `LOCAL_EMBEDDING_URL`, `LOCAL_EMBEDDING_MODEL` and `LOCAL_EMBEDDING_DIMENSIONS` (1-2000). These endpoints must use an explicit loopback IP. Inside Docker, loopback means the app container: a model listening on the host is not automatically reachable or authorized. Use the native service with a local model, or explicitly arrange a shared network namespace. Docker DNS names and arbitrary remote endpoints are intentionally not accepted by the current local-only privacy gateway.
+
+Native development requires Go matching `go.mod`, Node matching the Dockerfile, Git, and PostgreSQL with pgvector installed. Provide `DATABASE_URL_FILE` with a PostgreSQL connection URL, or `DATABASE_URL` plus `DATABASE_PASSWORD_FILE`. Never commit these files. Build the UI before the Go binary:
+
+```sh
+npm --prefix web ci
+npm --prefix web run build
+go build -o build/onboardmeplease ./cmd/onboardmeplease
+```
+
+On Windows use `-o build/onboardmeplease.exe`. Configure `APP_DATA_DIR` for writable private storage, then run the binary. The default listener is `127.0.0.1:8765`. `doctor` checks Git, data storage and database extensions. Native cross-compilation is not equivalent to a tested native installation.
+
+## Data, limits and recovery
+
+- GitHub clones are temporary staging inputs; approved snapshot files live under `APP_DATA_DIR/snapshots/<snapshot-id>/files`. The Compose `app_data` volume contains this directory. Existing host clones and Git credentials are not used.
+- PostgreSQL stores inventory, citable chunks, parser relationships, River jobs, versioned overviews, cached analysis units, OKF Markdown, embeddings and snapshot-scoped chat. New migrations are applied automatically at startup and preserve existing data.
+- Each analysis run processes up to 8 uncached units, each at most 12 chunks / 24,000 source bytes. Oversized chunks are explicit gaps. The landing overview shows the reviewed summary; detailed batch findings remain in searchable OKF. The summary has a separate source budget and cannot imply all reviewed details fit. Up to 600 accepted claims are stored in knowledge; capped results remain partial.
+- Question planning adds at most 3 searches to the original question. Ranked source/knowledge results are fused; empty retrieval can relax lexical conjunctions. One adjacent chunk on each side can complete split source without a language parser. These reads and graph expansion share the same source budget. Graph exploration uses visited nodes, 3 hops, 60 shared expansions and bounded fan-out. Dynamic/cross-language links remain unresolved unless supported by source. The diagram shows parser-resolved static relationships, not a runtime trace.
+- Source secrets are excluded before indexing, rescanned before model use, and checked in generated output/export. Scanning is conservative and can miss secrets or exclude useful code; inspect the inventory. Keys stay in backend secret files and are absent from job payloads, browser bundles and model inputs.
+- HTTP 401 indicates a rejected credential; 429 indicates API quota/rate limiting; 400 indicates a request/model configuration problem. Analysis jobs stop on provider failure and retain completed batches for explicit resume. Errors do not include raw provider bodies. Source search remains available.
+
+`docker compose stop` and `docker compose start` preserve data. With cloud mode, use the same `-f compose.yaml -f compose.cloud.yaml` files when rebuilding/recreating. `docker compose down -v` deletes persistent data and is not a normal upgrade step. Back up the PostgreSQL database and `app_data` volume together while the app is stopped; keep secret files separately protected. See [deployment requirements](docs/readme-contract.md) for the recovery checklist. Restore testing on additional hosts is still required before a broad release.
+
+## Verification and architecture
+
+```sh
+go test ./...
+go vet ./...
+python scripts/check_phase0.py
+npm --prefix web run build
+```
+
+The Python checks require PyYAML (`python -m pip install PyYAML`). `scripts/test_rework.ps1` runs the database fixture and optionally the explicitly enabled live evaluation in the local Compose installation. Live tests make billable model/embedding requests using the configured backend provider, save only synthetic findings under ignored `work/`, and delete their own temporary database fixture. Unit tests do not contact a model. Existing cases retain their maintainer-review status; passing citation/format checks is not a semantic quality score.
+
+- [Architecture rework and acceptance gates](docs/architecture-rework.md)
+- [Current verification, evaluation results and platform matrix](docs/rework-verification.md)
+- [Original implementation plan](implementation-plan.md)
+- [Canonical prompt library](docs/prompt-library.md) and [packaged registry](prompts/README.md)
+- [API contract](api/openapi.yaml)
+- [Historical Phase 3 preview](docs/phase-3.md)

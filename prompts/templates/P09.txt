@@ -1,0 +1,12 @@
+Propose revisions to the affected knowledge documents for this new snapshot. Reassess only
+claims for which current supporting evidence is supplied; return other affected claims as
+needs_reanalysis. A change outside a cited line may still affect a claim through dependency,
+configuration or registration changes.
+
+Classify claims as retain_with_current_support, revise, remove or needs_reanalysis. Identify
+newly unsupported paths and outdated deployment assumptions. Preserve human annotations
+separately; if evidence conflicts with them, flag the conflict rather than overwriting them.
+
+Return document_actions with current evidence IDs and concise change explanations. Do not
+assert that all impacts are known. Do not carry verification status to changed claims or
+fabricate review records. The application performs invalidation and versioned publication.

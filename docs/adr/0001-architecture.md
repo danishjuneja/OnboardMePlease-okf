@@ -2,6 +2,8 @@
 
 Status: accepted for the first implementation. Date: 2026-09-24.
 
+Implementation sequence clarified on 2026-09-25 in the [architecture rework](../architecture-rework.md). The layered architecture remains: source evidence and graph produce initial overview/OKF knowledge, and both knowledge and source feed question retrieval. The deterministic overview preview is not the planned synthesis stage; extra frameworks and UI dependencies are deferred while that gap is addressed.
+
 ## Context
 
 Vector similarity alone can find relevant snippets but often misses the links among a frontend, handler, worker, data store, and configuration. Generic GraphRAG can impose substantial extraction and summarization cost while a code repository offers stronger structural evidence. OKF is a portable representation of curated knowledge, not a retrieval engine or code analyzer.
@@ -21,3 +23,6 @@ The common graph and retrieval contract works across languages, while depth of p
 PostgreSQL holds graph, metadata, jobs, and vectors in one operational dependency. If scale measurements later justify a dedicated search or graph service, migrate behind the established interfaces and repeat the evaluation baseline.
 
 All model prompts live in a versioned registry with typed inputs/outputs. OKF is produced by a deterministic renderer; models propose content and cite provided evidence IDs. Human verification is recorded only from a real review action.
+
+
+Implementation note (2026-09-25): runtime synthesis uses bounded source units and an independent model support pass. Accepted claims produce both overview and stored OKF Markdown, with evidence dependencies reopened during chat retrieval. Go parsing and verified SCIP remain the implemented graph adapters; Tree-sitter/framework expansion in the original decision is deferred until a measured failure justifies it. OpenAI Responses with a backend key file is the first cloud generator; a compatible loopback chat-completions adapter is available for local operation.

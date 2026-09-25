@@ -4,16 +4,18 @@
   "title": "Runtime prompt registry",
   "type": "object",
   "additionalProperties": false,
-  "required": ["registry_version", "prompts"],
+  "required": ["registry_version", "agent_template_ref", "agent_checksum", "prompts"],
   "properties": {
     "registry_version": { "type": "string", "minLength": 1 },
+    "agent_template_ref": { "const": "templates/A00.txt" },
+    "agent_checksum": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
     "prompts": {
       "type": "array",
       "minItems": 1,
       "items": {
         "type": "object",
         "additionalProperties": false,
-        "required": ["id", "version", "purpose", "template_ref", "input_schema_ref", "output_schema_ref", "allowed_tools", "max_output_tokens", "max_tool_calls"],
+        "required": ["id", "version", "purpose", "template_ref", "input_schema_ref", "output_schema_ref", "allowed_tools", "max_output_tokens", "max_tool_calls", "checksum"],
         "properties": {
           "id": { "type": "string", "pattern": "^P[0-9]{2}$" },
           "version": { "type": "string", "pattern": "^[0-9]+\\.[0-9]+\\.[0-9]+$" },
@@ -24,7 +26,7 @@
           "allowed_tools": { "type": "array", "items": { "enum": ["exact_search", "lexical_search", "semantic_search", "expand_graph", "read_evidence", "find_references"] }, "uniqueItems": true },
           "max_output_tokens": { "type": "integer", "minimum": 1 },
           "max_tool_calls": { "type": "integer", "minimum": 0 },
-          "checksum": { "type": "string", "description": "Required for packaged registry; generated from actual template bytes" }
+          "checksum": { "type": "string", "pattern": "^[0-9a-f]{64}$", "description": "SHA-256 of the packaged template bytes" }
         }
       }
     }

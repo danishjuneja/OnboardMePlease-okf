@@ -1,10 +1,10 @@
 openapi: 3.1.0
 info:
   title: OnboardMePlease API
-  version: 0.2.0
+  version: 0.4.0
   description: >-
-    Phase 2 capture, indexing, evidence, search, and graph endpoints are implemented.
-    Overview, questions, deletion, and knowledge export paths remain planned.
+    Capture, resumable synthesis, searchable OKF knowledge and source-grounded questions are implemented.
+    Deletion and separate snapshot creation remain planned; those routes are marked below.
 servers:
   - url: http://127.0.0.1:8765
     description: Loopback default for the local single-user service.
@@ -36,7 +36,7 @@ paths:
   /v1/repositories/{repositoryId}:
     delete:
       operationId: deleteRepository
-      summary: Request deletion of repository data and derived indexes
+      summary: Planned (not implemented) - request deletion of repository data
       parameters:
         - $ref: '#/components/parameters/RepositoryId'
       responses:
@@ -47,7 +47,7 @@ paths:
   /v1/repositories/{repositoryId}/snapshots:
     post:
       operationId: createSnapshot
-      summary: Reindex a selected GitHub commit
+      summary: Planned (not implemented) - create another snapshot
       parameters:
         - $ref: '#/components/parameters/RepositoryId'
       requestBody:
@@ -208,10 +208,108 @@ paths:
               schema: { $ref: '../contracts/analysis.schema.json#/$defs/Overview' }
         '403': { $ref: '#/components/responses/Problem' }
         '404': { $ref: '#/components/responses/Problem' }
+  /v1/repositories/{repositoryId}/snapshots/{snapshotId}/overview/inventory:
+    get:
+      operationId: getOverviewInventory
+      summary: Page through every accounted-for snapshot artifact
+      parameters:
+        - $ref: '#/components/parameters/RepositoryId'
+        - $ref: '#/components/parameters/SnapshotId'
+        - name: offset
+          in: query
+          schema: { type: integer, minimum: 0 }
+        - name: limit
+          in: query
+          schema: { type: integer, minimum: 1, maximum: 500 }
+      responses:
+        '200': { description: Artifact status, category, and reason codes }
+        '404': { $ref: '#/components/responses/Problem' }
+  /v1/repositories/{repositoryId}/snapshots/{snapshotId}/overview/notes:
+    post:
+      operationId: addOverviewNote
+      summary: Retain a local correction attached to a current overview claim
+      parameters:
+        - $ref: '#/components/parameters/RepositoryId'
+        - $ref: '#/components/parameters/SnapshotId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [claim_id, note]
+              properties:
+                claim_id: { type: string }
+                note: { type: string, minLength: 1, maxLength: 2000 }
+      responses:
+        '201': { description: Correction retained without automatic human verification }
+        '422': { $ref: '#/components/responses/Problem' }
+  /v1/repositories/{repositoryId}/snapshots/{snapshotId}/overview/notes/{noteId}:
+    delete:
+      operationId: deleteOverviewNote
+      summary: Remove one local correction from the selected snapshot
+      parameters:
+        - $ref: '#/components/parameters/RepositoryId'
+        - $ref: '#/components/parameters/SnapshotId'
+        - name: noteId
+          in: path
+          required: true
+          schema: { type: integer, minimum: 1 }
+      responses:
+        '204': { description: Correction removed }
+        '404': { $ref: '#/components/responses/Problem' }
+  /v1/repositories/{repositoryId}/snapshots/{snapshotId}/analysis:
+    get:
+      operationId: analysisStatus
+      summary: Latest synthesis job state for this snapshot
+      parameters:
+        - $ref: '#/components/parameters/RepositoryId'
+        - $ref: '#/components/parameters/SnapshotId'
+      responses:
+        '200': { description: Latest job ID and state, or not_started }
+        '404': { $ref: '#/components/responses/Problem' }
+    post:
+      operationId: queueAnalysis
+      summary: Analyze up to eight uncached source units and publish assessed overview and OKF
+      parameters:
+        - $ref: '#/components/parameters/RepositoryId'
+        - $ref: '#/components/parameters/SnapshotId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              properties:
+                cloud_opt_in:
+                  type: boolean
+                  default: false
+                  description: Explicitly saves cloud permission for this repository when installation policy allows it.
+      responses:
+        '202':
+          description: Analysis queued; repeat after completion to resume remaining source units
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/JobAccepted' }
+        '403': { $ref: '#/components/responses/Problem' }
+        '404': { $ref: '#/components/responses/Problem' }
+        '422': { $ref: '#/components/responses/Problem' }
   /v1/repositories/{repositoryId}/snapshots/{snapshotId}/questions:
+    get:
+      operationId: getConversation
+      summary: Most recent thirty answers in this snapshot, oldest first
+      parameters:
+        - $ref: '#/components/parameters/RepositoryId'
+        - $ref: '#/components/parameters/SnapshotId'
+      responses:
+        '200': { description: Object with answers array }
+        '404': { $ref: '#/components/responses/Problem' }
     post:
       operationId: askQuestion
-      summary: Ask a scoped technical question
+      summary: Retrieve OKF and source, explore bounded relationships, compose and assess a technical answer
+      description: Synchronous request with a seven-minute timeout. Mutations require the local session cookie and X-CSRF-Token.
       parameters:
         - $ref: '#/components/parameters/RepositoryId'
         - $ref: '#/components/parameters/SnapshotId'
@@ -224,18 +322,16 @@ paths:
               additionalProperties: false
               required: [question]
               properties:
-                question: { type: string, minLength: 1, maxLength: 12000 }
-                conversation_id: { type: string }
-                selected_component_ids:
-                  type: array
-                  items: { type: string }
+                question: { type: string, minLength: 1, maxLength: 2000, description: Also limited to 2000 UTF-8 bytes by the server. }
+                parent_id: { type: string, description: Previous answer ID from this snapshot, or empty for a new question. }
       responses:
-        '202':
-          description: Answer job queued
+        '200':
+          description: Persisted assessed claims, source citations, retrieved OKF concepts, static diagram links and explicit gaps
           content:
             application/json:
-              schema: { $ref: '#/components/schemas/JobAccepted' }
-        '403': { $ref: '#/components/responses/Problem' }
+              schema:
+                $ref: '../contracts/answer.schema.json'
+        '404': { $ref: '#/components/responses/Problem' }
         '422': { $ref: '#/components/responses/Problem' }
   /v1/repositories/{repositoryId}/snapshots/{snapshotId}/evidence/{evidenceId}:
     get:
@@ -257,18 +353,18 @@ paths:
         '403': { $ref: '#/components/responses/Problem' }
         '404': { $ref: '#/components/responses/Problem' }
   /v1/repositories/{repositoryId}/snapshots/{snapshotId}/knowledge/export:
-    post:
+    get:
       operationId: exportKnowledge
-      summary: Validate and prepare a sanitized OKF bundle
+      summary: Download a validated, source-backed OKF v0.2 ZIP bundle
       parameters:
         - $ref: '#/components/parameters/RepositoryId'
         - $ref: '#/components/parameters/SnapshotId'
       responses:
-        '202':
-          description: Export validation job queued
+        '200':
+          description: Sanitized OKF bundle
           content:
-            application/json:
-              schema: { $ref: '#/components/schemas/JobAccepted' }
+            application/zip:
+              schema: { type: string, format: binary }
         '403': { $ref: '#/components/responses/Problem' }
   /v1/jobs/{jobId}:
     get:

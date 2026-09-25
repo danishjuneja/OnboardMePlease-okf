@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"net/http"
 	"strconv"
+	"strings"
 	"sync"
 	"time"
 
@@ -18,6 +19,7 @@ import (
 
 	"onboardmeplease/internal/config"
 	"onboardmeplease/internal/jobs"
+	"onboardmeplease/internal/providers"
 	"onboardmeplease/internal/repository"
 	"onboardmeplease/internal/webui"
 )
@@ -57,6 +59,15 @@ func (server *Server) Handler() http.Handler {
 	mux.HandleFunc("GET /v1/repositories/{repositoryId}/snapshots/{snapshotId}/graph", server.withSession(server.getGraph))
 	mux.HandleFunc("POST /v1/repositories/{repositoryId}/snapshots/{snapshotId}/scip", server.withSession(server.importSCIP))
 	mux.HandleFunc("POST /v1/repositories/{repositoryId}/snapshots/{snapshotId}/embeddings", server.withSession(server.queueEmbeddings))
+	mux.HandleFunc("GET /v1/repositories/{repositoryId}/snapshots/{snapshotId}/overview", server.withSession(server.getOverview))
+	mux.HandleFunc("GET /v1/repositories/{repositoryId}/snapshots/{snapshotId}/overview/inventory", server.withSession(server.getOverviewInventory))
+	mux.HandleFunc("POST /v1/repositories/{repositoryId}/snapshots/{snapshotId}/overview/notes", server.withSession(server.addOverviewNote))
+	mux.HandleFunc("DELETE /v1/repositories/{repositoryId}/snapshots/{snapshotId}/overview/notes/{noteId}", server.withSession(server.deleteOverviewNote))
+	mux.HandleFunc("GET /v1/repositories/{repositoryId}/snapshots/{snapshotId}/knowledge/export", server.withSession(server.exportOKF))
+	mux.HandleFunc("GET /v1/repositories/{repositoryId}/snapshots/{snapshotId}/analysis", server.withSession(server.analysisStatus))
+	mux.HandleFunc("POST /v1/repositories/{repositoryId}/snapshots/{snapshotId}/analysis", server.withSession(server.queueAnalysis))
+	mux.HandleFunc("POST /v1/repositories/{repositoryId}/snapshots/{snapshotId}/questions", server.withSession(server.askQuestion))
+	mux.HandleFunc("GET /v1/repositories/{repositoryId}/snapshots/{snapshotId}/questions", server.withSession(server.getConversation))
 	mux.HandleFunc("/", webui.Handler())
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.Host != server.Config.PublicHost {
@@ -113,8 +124,9 @@ func (server *Server) session(w http.ResponseWriter, r *http.Request) {
 	if server.Config.ModelMode == "cloud_opt_in" && server.Config.OpenAIKeyFile != "" {
 		available = append(available, "cloud")
 	}
-	writeJSON(w, http.StatusOK, map[string]any{"csrf_token": csrf, "model_mode": server.Config.ModelMode,
-		"embedding_providers": available, "phase": 2})
+	_, generationErr := providers.ConfiguredGeneration(server.Config)
+	writeJSON(w, http.StatusOK, map[string]any{"generation_available": generationErr == nil, "generation_provider": server.Config.GenerationProvider, "generation_model": server.Config.GenerationModel, "csrf_token": csrf, "model_mode": server.Config.ModelMode,
+		"embedding_providers": available, "phase": 3})
 }
 
 func (server *Server) withSession(next http.HandlerFunc) http.HandlerFunc {
@@ -211,9 +223,10 @@ func (server *Server) addRepository(w http.ResponseWriter, r *http.Request) {
 }
 
 type jobState struct {
-	ID    int64  `json:"job_id"`
-	Kind  string `json:"kind"`
-	State string `json:"state"`
+	Failure string `json:"failure,omitempty"`
+	ID      int64  `json:"job_id"`
+	Kind    string `json:"kind"`
+	State   string `json:"state"`
 }
 
 func (server *Server) readJob(ctx context.Context, rawID string) (jobState, error) {
@@ -222,8 +235,27 @@ func (server *Server) readJob(ctx context.Context, rawID string) (jobState, erro
 		return jobState{}, errors.New("invalid job ID")
 	}
 	var job jobState
-	if err := server.DB.QueryRow(ctx, `SELECT id, kind, state::text FROM river_job WHERE id=$1`, id).Scan(&job.ID, &job.Kind, &job.State); err != nil {
+	var failure string
+	if err := server.DB.QueryRow(ctx, `SELECT id, kind, state::text, COALESCE(errors[array_length(errors,1)]->>'error','') FROM river_job WHERE id=$1`, id).Scan(&job.ID, &job.Kind, &job.State, &failure); err != nil {
 		return jobState{}, errors.New("job unavailable")
+	}
+	if job.State == "cancelled" || job.State == "discarded" {
+		job.Failure = "The job stopped before completion. Completed analysis batches can be resumed."
+		if strings.Contains(failure, "HTTP 429") {
+			job.Failure = "Model quota or rate limit exceeded (HTTP 429). Check API billing/quota before resuming."
+			if strings.Contains(failure, "API quota exhausted") {
+				job.Failure = "Model API quota exhausted (HTTP 429). Add API credits or replace the configured key before resuming."
+			}
+			if strings.Contains(failure, "generation rate limit exceeded") {
+				job.Failure = "Model rate limit exceeded (HTTP 429). Wait before resuming; successful batches are cached."
+			}
+		}
+		if strings.Contains(failure, "HTTP 401") {
+			job.Failure = "The model credential was rejected (HTTP 401). Check the backend key file."
+		}
+		if strings.Contains(failure, "HTTP 400") {
+			job.Failure = "The model rejected the request (HTTP 400). Check structured-output support and model configuration."
+		}
 	}
 	return job, nil
 }

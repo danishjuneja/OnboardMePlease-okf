@@ -13,6 +13,8 @@ import (
 
 	"onboardmeplease/internal/config"
 	"onboardmeplease/internal/index"
+	"onboardmeplease/internal/knowledge"
+	"onboardmeplease/internal/providers"
 	"onboardmeplease/internal/repository"
 )
 
@@ -24,6 +26,7 @@ type IngestArgs struct {
 func (IngestArgs) Kind() string { return "ingest_snapshot" }
 
 type IngestWorker struct {
+	Settings config.Config
 	river.WorkerDefaults[IngestArgs]
 	DB             *pgxpool.Pool
 	DataDir        string
@@ -102,16 +105,28 @@ func (worker *IngestWorker) Work(ctx context.Context, job *river.Job[IngestArgs]
 	if err := index.Build(ctx, worker.DB, worker.DataDir, job.Args.RepositoryID, job.Args.SnapshotID); err != nil {
 		return fmt.Errorf("snapshot evidence indexing failed: %w", err)
 	}
+	if _, err := knowledge.Build(ctx, worker.DB, job.Args.RepositoryID, job.Args.SnapshotID); err != nil {
+		return fmt.Errorf("snapshot overview generation failed: %w", err)
+	}
+	if adapter, e := providers.ConfiguredGeneration(worker.Settings); e == nil && (adapter.Kind == "local" || input.PrivacyMode == "cloud_opt_in") {
+		_, err = river.ClientFromContext[pgx.Tx](ctx).Insert(ctx, SynthesisArgs{RepositoryID: job.Args.RepositoryID, SnapshotID: job.Args.SnapshotID}, nil)
+		if err != nil {
+			return err
+		}
+	}
 	return nil
 }
 
 func NewClient(pool *pgxpool.Pool, settings config.Config) (*river.Client[pgx.Tx], error) {
 	workers := river.NewWorkers()
-	if err := river.AddWorkerSafely(workers, &IngestWorker{DB: pool, DataDir: settings.DataDir, CaptureTimeout: settings.CaptureTimeout}); err != nil {
+	if err := river.AddWorkerSafely(workers, &IngestWorker{DB: pool, DataDir: settings.DataDir, CaptureTimeout: settings.CaptureTimeout, Settings: settings}); err != nil {
 		return nil, errors.New("cannot register ingestion worker")
 	}
 	if err := river.AddWorkerSafely(workers, &EmbedWorker{DB: pool, Settings: settings}); err != nil {
 		return nil, errors.New("cannot register embedding worker")
+	}
+	if err := river.AddWorkerSafely(workers, &SynthesisWorker{DB: pool, Settings: settings}); err != nil {
+		return nil, err
 	}
 	client, err := river.NewClient(riverpgxv5.New(pool), &river.Config{
 		Queues:  map[string]river.QueueConfig{river.QueueDefault: {MaxWorkers: 2}},

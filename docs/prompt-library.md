@@ -133,6 +133,24 @@ materially changes the technical answer and available evidence cannot resolve it
 Return exactly the requested schema. Evidence explanations are concise support notes,
 not private chain-of-thought. Do not create verification timestamps, human approvals,
 confidence percentages or claims of successful execution.
+
+For the current bounded runtime, the supplied task JSON Schema is authoritative
+for the output envelope. P01/P04/P07 return claims (text, section, concept,
+evidence_ids, assumption) and gaps. P05 returns queries. P06 returns assessments
+(index, status, reason), with zero-based claim indices. Do not emit other fields.
+Use the same source-support rules despite the smaller envelope. No tools are
+available inside a generation request; the application handles source access.
+
+
+Static source is sufficient to explain conditional program behavior using ordinary
+language and API semantics. Do not require a runtime trace to say that code registers
+an HTTP route or returns a status after a call. Require runtime evidence only for
+claims that a deployment or execution actually occurred. A call to a named operation
+is not proof of its effect: inspect its implementation or say "calls" / "requests".
+An assumption field must never rescue an overclaim in the claim text.
+Treat documentation as an attributed description until corroborated by implementation.
+A tutorial about an external library does not establish that this repository implements
+that library. Scope observations to the supplied files, not unseen repository contents.
 ```
 
 ## P01 — component discovery
@@ -153,6 +171,14 @@ Account for supplied inventory members that cannot be assigned confidently in
 unclassified_ids. Preserve disconnected components. If this is a partition, state its scope
 and do not claim repository-wide completeness. Return the shared envelope with components,
 proposed_relations and unclassified_ids.
+
+Runtime task projection:
+Read implementation and identify capabilities, entry points, startup, state changes, effects, failures, tests and gaps. Explain technical behavior, not file presence. These are partial source units, not necessarily components. Use at most 10 claims. Sections: purpose, components, interfaces, runtime, startup, deployment, data, flows, start_exploring. Group claims with concise capability names in concept. Every claim requires source IDs; qualify inferred links in text and assumption. Never infer purpose from directory names or README headings.
+
+Describe each source unit's local responsibilities. Do not assign a repository-wide
+purpose from one unit; use components for local capability descriptions. Keep paths
+and source kind in mind: code is implementation, documentation is a claim about code.
+Phrase gaps as scoped investigation questions rather than unverified factual warnings.
 ```
 
 ## P02 — startup and deployment analysis
@@ -219,6 +245,15 @@ coverage limitations from the supplied ledger, without inventing percentages.
 Return the shared envelope plus overview_sections, navigation_groups and starting_points.
 Each starting point identifies supplied source/component IDs and explains what a developer
 can learn there. Suggest specific follow-up questions grounded in discovered components.
+
+Runtime task projection:
+Create a technical orientation from implementation. Derive purpose and capabilities; explain startup and consumer-to-code flows. Distinguish library/examples/disconnected projects from a deployed application. At most 12 claims; supported details matter more than breadth. Use source evidence IDs. Derived claims are navigation hints, not independent proof. Use section purpose for the purpose paragraph; other sections components, startup, interfaces, data, flows, start_exploring. Every claim needs a capability concept title and an assumption string (empty for direct facts).
+
+The purpose section is only for a repository-wide synthesis of the reviewed areas.
+Keep disconnected examples distinct. Prioritize implementation over documentation.
+When coverage or the supplied rollup is partial, state that scope in the purpose text.
+Prefer a concise, source-supported purpose claim over broad speculative integration.
+Do not repeat unit-level purpose statements as separate repository purposes.
 ```
 
 ## P05 — interactive query planner
@@ -239,6 +274,9 @@ Return intent, interpreted_question, subquestions, retrieval_requests, required_
 stop_conditions and clarification if essential. Use only allowed request types and relation
 names. Keep the complete plan within the total supplied budget. Do not generate an answer,
 invent search results, request shell/network/SQL access, or demand a runtime deployment.
+
+Runtime task projection:
+Resolve follow-up references and return up to 3 short source-search queries. Use identifiers and technical terms; a query may join alternatives with OR. No answers or invented facts.
 ```
 
 ## P06 — evidence and claim assessment
@@ -260,6 +298,13 @@ repository was searched. Identify claims of execution based solely on source or 
 Do not invent evidence to repair a claim. Return claim_assessments, path_assessments,
 missing_evidence, conflicts and recommended_disposition. Do not assign human verification
 or a probability of truth. The application makes the final publication decision.
+
+Assess the claim text and its assumption together, but reject an unqualified effect
+claim when source only shows a call, stub or unbound interface. A call's name alone
+never proves a database write, refund, message delivery, or startup success.
+Do not demand observed runtime execution to support a conditional description of code.
+Some candidates are scoped evidence gaps. Verify these against all supplied source;
+do not invent language/framework compatibility problems or absent files from partial input.
 ```
 
 ## P07 — interactive technical answer
@@ -285,6 +330,9 @@ unless supplied run evidence establishes it.
 Return answer_blocks, optional diagram_nodes/diagram_edges tied to validated IDs, limitations,
 and followup_questions in the requested schema. Diagram labels are plain text; no HTML,
 scripts, external images or generated file URLs. Citation URLs are rendered by the application.
+
+Runtime task projection:
+Answer technically in up to 16 ordered claims: trigger, implementation path, conditions, state changes, events, background work, failure paths and tests as relevant. Every claim needs source IDs. Use section answer and a concise capability concept. A static graph edge is not observed execution. Summaries and previous questions are not evidence. Explicitly qualify inferred links in the text and assumption. Do not claim a missing consumer is absent everywhere, that a persistence stub writes a real database, or that asynchronous effects completed before the HTTP response. Put missing evidence and uncertainty in gaps.
 ```
 
 ## P08 — OKF content generation

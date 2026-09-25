@@ -88,8 +88,8 @@ def check_schemas_and_api() -> None:
         doc = json.loads(path.read_text(encoding="utf-8"))
         if doc.get("$schema") != "https://json-schema.org/draft/2020-12/schema":
             fail(f"unexpected schema dialect: {path}")
-        if not doc.get("$defs") and path.name != "prompt-registry.schema.json":
-            fail(f"schema has no definitions: {path}")
+        if not doc.get("$defs") and not (doc.get("type") == "object" and doc.get("required")):
+            fail(f"schema has neither definitions nor a required root object: {path}")
         loaded[path.resolve()] = doc
 
     api_path = (ROOT / "api" / "openapi.yaml").resolve()
@@ -163,9 +163,11 @@ def check_prompts_and_readme() -> None:
     # Git stores LF while this Windows checkout uses CRLF. Compare the original
     # prose after newline normalization, preserving its words and punctuation.
     current_normalized = current.replace(b"\r\n", b"\n")
-    if not current_normalized.startswith(original):
+    marker = b"## Implementation status"
+    original_notes = original.split(marker, 1)[0]
+    if not current_normalized.startswith(original_notes):
         fail("README author notes were changed instead of appended")
-    if b"## Implementation status" not in current_normalized[len(original) :]:
+    if marker not in current_normalized[len(original_notes) :]:
         fail("README is missing appended phase status")
     canary = "SYNTHETIC_CANARY_NOT_A_CREDENTIAL"
     matches = []

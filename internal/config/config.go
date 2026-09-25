@@ -12,6 +12,9 @@ import (
 )
 
 type Config struct {
+	GenerationProvider       string
+	GenerationModel          string
+	LocalGenerationURL       string
 	ListenAddr               string
 	PublicHost               string
 	DataDir                  string
@@ -108,5 +111,6 @@ func Load() (Config, error) {
 	return Config{ListenAddr: listen, PublicHost: publicHost, DataDir: absoluteData, DatabaseURL: databaseURL,
 		CaptureTimeout: captureTimeout, ModelMode: mode,
 		LocalEmbeddingURL: localURL, LocalEmbeddingModel: localModel, LocalEmbeddingDimensions: localDimensions,
+		GenerationProvider: strings.TrimSpace(os.Getenv("GENERATION_PROVIDER")), GenerationModel: strings.TrimSpace(os.Getenv("GENERATION_MODEL")), LocalGenerationURL: strings.TrimSpace(os.Getenv("LOCAL_GENERATION_URL")),
 		OpenAIKeyFile: strings.TrimSpace(os.Getenv("OPENAI_API_KEY_FILE"))}, nil
 }

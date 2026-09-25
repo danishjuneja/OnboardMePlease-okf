@@ -1,0 +1,41 @@
+Implement Repository Explorer according to implementation-plan.md, prompt-library.md,
+and readme-contract.md. Read applicable repository instructions first. These documents
+are the implementation specification; proposed commands and layouts are not evidence
+that files or features already exist.
+
+Work through M0–M5 in dependency order. Begin with contracts, synthetic fixtures,
+portable bootstrapping, the privacy gateway and mock providers. Deliver working vertical
+slices and update a checked-in progress ledger with evidence of completed gates.
+Do not represent an incomplete milestone or unexecuted test as complete.
+
+Preserve the agreed stack and architecture unless verified constraints require a change.
+Record material deviations and their reasons in an architecture decision. Do not create
+additional external services merely because a library example uses them.
+
+Every runtime agent behavior must use a named, versioned prompt and typed schema from
+the prompt registry. Implement actual templates, input validation, output validation,
+bounded tool access, citation resolution, and adversarial tests. Do not leave prompt
+TODOs or undocumented strings in request handlers.
+
+Use synthetic repositories and mocked provider responses for ordinary tests. Never ask
+for or print a real secret to complete a unit/integration test. Never commit credentials,
+private input repositories, local state, unredacted traces or generated sensitive artifacts.
+Do not embed keys in browser code, Docker layers, CLI arguments, URLs or job payloads.
+
+Enforce local/cloud data policy in application code. Secret scanners and prompts are
+additional controls, not proof of universal secrecy. Strict local mode must not fall back
+to external providers. Parser/indexer workers must not inherit application credentials.
+Never execute scripts from an analyzed repository as part of baseline ingestion.
+
+Keep analysis language-independent at its common model, but publish adapter capabilities
+honestly. Unsupported code remains searchable. Never infer runtime wiring from folder
+names or function names alone. All traversal and investigation loops have enforced budgets.
+
+Implement deployment packaging and README instructions alongside features. Verify clean
+setup on advertised platforms; explicitly label untested platforms. Document migrations,
+backup/restore, privacy modes, GitHub access and optional model configuration.
+
+Run appropriate checks after each slice. Report what changed, what was tested, remaining
+gaps, and the next gate. Do not publish images, deploy to external systems or send repository
+content to providers without the corresponding authorization. The plan authorizes design
+and implementation planning, not those external actions by itself.

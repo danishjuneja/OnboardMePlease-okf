@@ -71,10 +71,7 @@ func (worker *EmbedWorker) Work(ctx context.Context, job *river.Job[EmbedArgs]) 
 	if count == 0 {
 		return river.JobCancel(errors.New("snapshot has no indexed evidence"))
 	}
-	if count > 5000 {
-		return river.JobCancel(errors.New("embedding request exceeds 5000 chunk limit"))
-	}
-	rows, err := worker.DB.Query(ctx, `SELECT id,path,content,content_hash FROM evidence_chunks WHERE snapshot_id=$1 ORDER BY path,start_line`, job.Args.SnapshotID)
+	rows, err := worker.DB.Query(ctx, `SELECT e.id,e.path,e.content,e.content_hash FROM evidence_chunks e WHERE e.snapshot_id=$1 AND NOT EXISTS(SELECT 1 FROM evidence_embeddings b WHERE b.evidence_id=e.id AND b.provider=$2 AND b.model=$3 AND b.dimensions=$4 AND b.content_hash=e.content_hash) ORDER BY e.path,e.start_line LIMIT 250`, job.Args.SnapshotID, adapter.Kind, adapter.Model, adapter.Dimensions)
 	if err != nil {
 		return err
 	}
@@ -112,5 +109,32 @@ func (worker *EmbedWorker) Work(ctx context.Context, job *river.Job[EmbedArgs]) 
 			return err
 		}
 	}
-	return rows.Err()
+	if err = rows.Err(); err != nil {
+		return err
+	}
+	rows.Close()
+	concepts, err := worker.DB.Query(ctx, `SELECT k.version,k.id,k.markdown,k.content_hash FROM knowledge_concepts k WHERE k.snapshot_id=$1 AND k.version=(SELECT max(version) FROM overview_versions WHERE snapshot_id=$1) AND NOT EXISTS(SELECT 1 FROM knowledge_embeddings b WHERE (b.snapshot_id,b.version,b.concept_id)=(k.snapshot_id,k.version,k.id) AND b.provider=$2 AND b.model=$3 AND b.dimensions=$4 AND b.content_hash=k.content_hash) ORDER BY k.id LIMIT 100`, job.Args.SnapshotID, adapter.Kind, adapter.Model, adapter.Dimensions)
+	if err != nil {
+		return err
+	}
+	defer concepts.Close()
+	for concepts.Next() {
+		var version int
+		var id, markdown, hash string
+		if err = concepts.Scan(&version, &id, &markdown, &hash); err != nil {
+			return err
+		}
+		if len(markdown) > 24000 {
+			continue
+		}
+		vector, e := adapter.Embed(ctx, request, markdown)
+		if e != nil {
+			return e
+		}
+		_, err = worker.DB.Exec(ctx, `INSERT INTO knowledge_embeddings(snapshot_id,version,concept_id,provider,model,dimensions,content_hash,embedding) VALUES($1,$2,$3,$4,$5,$6,$7,$8::vector) ON CONFLICT(snapshot_id,version,concept_id,provider,model,dimensions) DO UPDATE SET content_hash=excluded.content_hash,embedding=excluded.embedding`, job.Args.SnapshotID, version, id, adapter.Kind, adapter.Model, adapter.Dimensions, hash, VectorLiteral(vector))
+		if err != nil {
+			return err
+		}
+	}
+	return concepts.Err()
 }

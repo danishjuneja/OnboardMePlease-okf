@@ -1,0 +1,25 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://onboardmeplease.local/contracts/prompt-output.schema.json",
+  "title": "Scoped prompt output envelope",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["status", "snapshot_id", "claims", "unresolved", "coverage", "suggested_followups", "payload"],
+  "properties": {
+    "status": { "enum": ["complete", "partial", "insufficient_evidence"] },
+    "snapshot_id": { "type": "string", "minLength": 1 },
+    "claims": { "type": "array", "items": { "$ref": "analysis.schema.json#/$defs/Claim" } },
+    "unresolved": { "type": "array", "items": { "$ref": "analysis.schema.json#/$defs/Limitation" } },
+    "coverage": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["considered_ids", "limitations"],
+      "properties": {
+        "considered_ids": { "type": "array", "items": { "type": "string" }, "uniqueItems": true },
+        "limitations": { "type": "array", "items": { "type": "string" } }
+      }
+    },
+    "suggested_followups": { "type": "array", "items": { "type": "string" } },
+    "payload": { "type": "object" }
+  }
+}

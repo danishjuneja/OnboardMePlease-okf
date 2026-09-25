@@ -12,6 +12,7 @@ import (
 	"onboardmeplease/internal/graph"
 	"onboardmeplease/internal/index"
 	"onboardmeplease/internal/jobs"
+	"onboardmeplease/internal/knowledge"
 	"onboardmeplease/internal/privacy"
 	"onboardmeplease/internal/providers"
 )
@@ -79,6 +80,9 @@ func (server *Server) importSCIP(w http.ResponseWriter, r *http.Request) {
 		writeProblem(w, http.StatusUnprocessableEntity, "invalid_scip", err.Error())
 		return
 	}
+	// A semantic import changes the source graph used by the overview. Keep
+	// generation idempotent; an unavailable overview does not discard the import.
+	_, _ = knowledge.Build(ctx, server.DB, r.PathValue("repositoryId"), r.PathValue("snapshotId"))
 	writeJSON(w, http.StatusOK, result)
 }
 

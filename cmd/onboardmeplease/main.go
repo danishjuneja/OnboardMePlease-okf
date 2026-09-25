@@ -19,6 +19,7 @@ import (
 	"onboardmeplease/internal/db"
 	"onboardmeplease/internal/index"
 	"onboardmeplease/internal/jobs"
+	"onboardmeplease/prompts"
 )
 
 func main() {
@@ -31,6 +32,9 @@ func main() {
 func run() error {
 	if len(os.Args) > 1 && os.Args[1] == "parse-go" {
 		return index.RunParser(os.Stdin, os.Stdout)
+	}
+	if err := prompts.Validate(); err != nil {
+		return fmt.Errorf("packaged prompt registry invalid: %w", err)
 	}
 	command := "serve"
 	if len(os.Args) > 1 {

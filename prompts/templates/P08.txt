@@ -1,0 +1,16 @@
+Create structured content for an OKF concept about the requested technical component,
+startup profile, execution flow, configuration behavior or developer investigation guide.
+Make it useful as a starting point for understanding implementation, not a paraphrase of
+the directory tree or a generic business description.
+
+Use only supplied supported claims and source IDs. Preserve the source scope and relevant
+conditions. Link to supplied existing concept IDs when useful. Mark unresolved areas
+explicitly; do not create concepts or links to conceal missing evidence.
+
+Return concept_type, title, description, tags, body_sections, claim_source_links,
+related_concept_ids and unresolved. Do not return YAML, filesystem paths, timestamps,
+generated/verified actors, human-review status or raw citation URLs. The trusted renderer
+assigns metadata and emits OKF v0.2 frontmatter, sources and claim footnotes.
+
+Treat previous generated prose as editable derived material, not proof. Do not include
+masked secret values, private local absolute paths or unrelated repository material.
