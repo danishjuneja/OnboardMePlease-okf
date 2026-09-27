@@ -1,6 +1,6 @@
 param(
     [string]$BaseUrl = 'http://127.0.0.1:8765',
-    [string]$CaptureResult = 'work/phase1-smoke.json'
+    [string]$CaptureResult = 'work/capture-smoke.json'
 )
 
 $ErrorActionPreference = 'Stop'
@@ -41,7 +41,7 @@ foreach ($claim in $overview.claims) {
         if ($source.evidence_id -ne $evidenceId) { throw 'Overview citation did not resolve' }
     }
 }
-$zipPath = Join-Path (Resolve-Path 'work') 'phase3-smoke.zip'
+$zipPath = Join-Path (Resolve-Path 'work') 'overview-smoke.zip'
 try {
     Invoke-WebRequest -Uri "$prefix/knowledge/export" -WebSession $webSession -OutFile $zipPath | Out-Null
     python scripts/validate_okf.py $zipPath
@@ -61,24 +61,5 @@ try {
     if (Test-Path -LiteralPath $zipPath) { Remove-Item -LiteralPath $zipPath }
 }
 
-if ($overview.claims.Count -gt 0) {
-    $claimId = $overview.claims[0].claim_id
-    $headers = @{ 'X-CSRF-Token' = $session.csrf_token }
-    $body = @{ claim_id = $claimId; note = 'Smoke-test correction; remove after verification.' } | ConvertTo-Json -Compress
-    $note = Invoke-RestMethod -Uri "$prefix/overview/notes" -Method Post -Body $body -ContentType 'application/json' -Headers $headers -WebSession $webSession
-    try {
-        $reindex = Invoke-RestMethod -Uri "$prefix/index" -Method Post -Headers $headers -WebSession $webSession
-        for ($attempt = 0; $attempt -lt 120; $attempt++) {
-            Start-Sleep -Seconds 1
-            $indexJob = Invoke-RestMethod -Uri "$BaseUrl/v1/jobs/$($reindex.job_id)" -WebSession $webSession
-            if ($indexJob.state -in @('completed', 'cancelled', 'discarded')) { break }
-        }
-        if ($indexJob.state -ne 'completed') { throw "Overview reindex did not complete: $($indexJob.state)" }
-        $after = Invoke-RestMethod -Uri "$prefix/overview" -WebSession $webSession
-        if (-not ($after.notes | Where-Object id -EQ $note.id)) { throw 'Correction did not persist after reindex' }
-    } finally {
-        Invoke-RestMethod -Uri "$prefix/overview/notes/$($note.id)" -Method Delete -Headers $headers -WebSession $webSession | Out-Null
-    }
-}
 [pscustomobject]@{ snapshot_id = $overview.snapshot_id; version = $overview.version; artifacts = $seen; claims = $overview.claims.Count; sections = $overview.sections.Count } |
     Format-Table snapshot_id, version, artifacts, claims, sections

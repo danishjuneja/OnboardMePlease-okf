@@ -1,4 +1,4 @@
-"""Copy Phase 0 fixtures into fresh local Git repositories for integration tests.
+"""Copy synthetic fixtures into fresh local Git repositories for integration tests.
 
 Usage: python scripts/materialize_fixtures.py <new-output-directory>
 The output directory must not exist. The mixed fixture gets one commit; the sparse

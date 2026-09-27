@@ -1,3 +1,5 @@
+> Historical document. Current behavior is described in [the architecture guide](../architecture.md).
+
 # Repository Explorer — README and setup contract
 
 Status: requirements for the future application's README, not installation instructions for an existing release. Proposed command names below must be implemented and verified before being published as runnable instructions. Never fill unknown release URLs or version numbers with invented values.

@@ -1,4 +1,4 @@
-"""Offline checks for Phase 0 design contracts and synthetic evidence fixtures.
+"""Offline checks for API/schema contracts and synthetic evidence fixtures.
 
 Requires Python 3.11+ and PyYAML 6.0.3. No API key or network connection is used.
 This checks syntax and internal references. Full JSON Schema/OpenAPI conformance
@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import json
 import re
-import subprocess
+import os
 from pathlib import Path
 from typing import Any
 
@@ -92,7 +92,7 @@ def check_schemas_and_api() -> None:
             fail(f"schema has neither definitions nor a required root object: {path}")
         loaded[path.resolve()] = doc
 
-    api_path = (ROOT / "api" / "openapi.yaml").resolve()
+    api_path = (ROOT / "contracts" / "openapi.yaml").resolve()
     api = yaml.load(api_path.read_text(encoding="utf-8"), Loader=UniqueKeyLoader)
     if api.get("openapi") != "3.1.0" or not api.get("paths"):
         fail("OpenAPI 3.1 paths missing")
@@ -115,7 +115,7 @@ def check_schemas_and_api() -> None:
 
 
 def check_fixture_cases() -> None:
-    path = ROOT / "evals" / "cases.json"
+    path = ROOT / "testdata" / "evals" / "cases.json"
     suite = json.loads(path.read_text(encoding="utf-8"))
     cases = suite.get("cases", [])
     if len(cases) < 8:
@@ -148,32 +148,26 @@ def check_fixture_cases() -> None:
     print(f"Validated {len(cases)} evaluation cases and source anchors")
 
 
-def check_prompts_and_readme() -> None:
-    prompt_text = (ROOT / "docs" / "prompt-library.md").read_text(encoding="utf-8")
-    for prompt_id in ["A00"] + [f"P{n:02}" for n in range(12)]:
-        if f"## {prompt_id} " not in prompt_text:
-            fail(f"missing prompt text: {prompt_id}")
-    original = subprocess.run(
-        ["git", "show", "HEAD:README.md"],
-        cwd=ROOT,
-        check=True,
-        capture_output=True,
-    ).stdout
-    current = (ROOT / "README.md").read_bytes()
-    # Git stores LF while this Windows checkout uses CRLF. Compare the original
-    # prose after newline normalization, preserving its words and punctuation.
-    current_normalized = current.replace(b"\r\n", b"\n")
-    marker = b"## Implementation status"
-    original_notes = original.split(marker, 1)[0]
-    if not current_normalized.startswith(original_notes):
-        fail("README author notes were changed instead of appended")
-    if marker not in current_normalized[len(original_notes) :]:
-        fail("README is missing appended phase status")
+def check_prompts() -> None:
+    import hashlib
+    registry_path = ROOT / "prompts" / "registry.json"
+    registry = json.loads(registry_path.read_text(encoding="utf-8"))
+    entries = [(registry["agent_template_ref"], registry["agent_checksum"])]
+    entries += [(p["template_ref"], p["checksum"]) for p in registry["prompts"]]
+    for relative, expected in entries:
+        template = (registry_path.parent / relative).resolve()
+        if not template.is_relative_to(ROOT / "prompts" / "templates"):
+            fail(f"invalid template reference: {relative}")
+        if hashlib.sha256(template.read_bytes()).hexdigest() != expected:
+            fail(f"prompt checksum mismatch: {relative}")
     canary = "SYNTHETIC_CANARY_NOT_A_CREDENTIAL"
     matches = []
-    for path in ROOT.rglob("*"):
-        if path.relative_to(ROOT).parts[0] in {"work", "secrets"}:
-            continue
+    excluded = {".git", "work", "secrets", "data", "node_modules", "dist", "build", ".cache", "__pycache__"}
+    candidates = []
+    for directory, dirs, files in os.walk(ROOT):
+        dirs[:] = [name for name in dirs if name not in excluded]
+        candidates.extend(Path(directory) / name for name in files)
+    for path in candidates:
         if path.is_file() and ".git" not in path.parts and path.suffix in {
             ".md", ".json", ".yaml", ".py", ".go", ".ts", ".synthetic"
         }:
@@ -181,17 +175,17 @@ def check_prompts_and_readme() -> None:
                 matches.append(path.relative_to(ROOT).as_posix())
     allowed = {
         "testdata/mixed-monolith/deploy/.env.synthetic",
-        "scripts/check_phase0.py",
+        "scripts/check_contracts.py",
         "internal/privacy/privacy.go",
         "internal/privacy/privacy_test.go",
     }
     if set(matches) != allowed:
         fail(f"synthetic marker occurred in unexpected files: {matches}")
-    print("Validated 13 baseline prompts, preserved README, and canary placement")
+    print("Validated prompt checksums and canary placement")
 
 
 def check_markdown_links() -> None:
-    markdown_files = [ROOT / "README.md", ROOT / "implementation-plan.md"]
+    markdown_files = [ROOT / "README.md"]
     markdown_files.extend((ROOT / "docs").rglob("*.md"))
     markdown_files.extend((ROOT / "prompts").rglob("*.md"))
     checked = 0
@@ -210,6 +204,6 @@ def check_markdown_links() -> None:
 if __name__ == "__main__":
     check_schemas_and_api()
     check_fixture_cases()
-    check_prompts_and_readme()
+    check_prompts()
     check_markdown_links()
-    print("Phase 0 offline checks passed")
+    print("Offline contract checks passed")

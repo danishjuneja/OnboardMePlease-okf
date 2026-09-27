@@ -1,7 +1,7 @@
 param(
     [string]$BaseUrl = 'http://127.0.0.1:8765',
     [string]$RepositoryUrl = 'https://github.com/octocat/Hello-World',
-    [string]$Output = 'work/phase1-smoke.json'
+    [string]$Output = 'work/capture-smoke.json'
 )
 
 $ErrorActionPreference = 'Stop'

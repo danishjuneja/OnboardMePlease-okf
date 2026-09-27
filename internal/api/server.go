@@ -61,8 +61,6 @@ func (server *Server) Handler() http.Handler {
 	mux.HandleFunc("POST /v1/repositories/{repositoryId}/snapshots/{snapshotId}/embeddings", server.withSession(server.queueEmbeddings))
 	mux.HandleFunc("GET /v1/repositories/{repositoryId}/snapshots/{snapshotId}/overview", server.withSession(server.getOverview))
 	mux.HandleFunc("GET /v1/repositories/{repositoryId}/snapshots/{snapshotId}/overview/inventory", server.withSession(server.getOverviewInventory))
-	mux.HandleFunc("POST /v1/repositories/{repositoryId}/snapshots/{snapshotId}/overview/notes", server.withSession(server.addOverviewNote))
-	mux.HandleFunc("DELETE /v1/repositories/{repositoryId}/snapshots/{snapshotId}/overview/notes/{noteId}", server.withSession(server.deleteOverviewNote))
 	mux.HandleFunc("GET /v1/repositories/{repositoryId}/snapshots/{snapshotId}/knowledge/export", server.withSession(server.exportOKF))
 	mux.HandleFunc("GET /v1/repositories/{repositoryId}/snapshots/{snapshotId}/analysis", server.withSession(server.analysisStatus))
 	mux.HandleFunc("POST /v1/repositories/{repositoryId}/snapshots/{snapshotId}/analysis", server.withSession(server.queueAnalysis))

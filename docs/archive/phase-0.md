@@ -1,6 +1,8 @@
+> Historical document. Current behavior is described in [the architecture guide](../architecture.md).
+
 # Phase 0: contracts and evaluation baseline
 
-Phase 0 establishes the behavior that implementation must satisfy. It does not claim that the API, indexer, or UI already runs. The implementation sequence remains in [the project plan](../implementation-plan.md).
+Phase 0 establishes the behavior that implementation must satisfy. It does not claim that the API, indexer, or UI already runs. The implementation sequence remains in [the project plan](implementation-plan.md).
 
 ## Product contract
 
@@ -14,12 +16,12 @@ The inventory accounts for every candidate artifact before overview synthesis. E
 
 | File | Purpose |
 |---|---|
-| [repository schema](../contracts/repository.schema.json) | Input kind, immutable snapshot identity, inventory and coverage |
-| [evidence schema](../contracts/evidence.schema.json) | Source ranges, symbols, relationships and provenance |
-| [analysis schema](../contracts/analysis.schema.json) | Claims, technical flows, overview sections and limitations |
-| [prompt registry schema](../contracts/prompt-registry.schema.json) | Versioned prompts, inputs, outputs and budgets |
-| [OpenAPI contract](../api/openapi.yaml) | Planned REST endpoints and server-sent progress |
-| [prompt baseline](../prompts/README.md) | Prompt IDs, expected source, and implementation rules |
+| [repository schema](../../contracts/repository.schema.json) | Input kind, immutable snapshot identity, inventory and coverage |
+| [evidence schema](../../contracts/evidence.schema.json) | Source ranges, symbols, relationships and provenance |
+| [analysis schema](../../contracts/analysis.schema.json) | Claims, technical flows, overview sections and limitations |
+| [prompt registry schema](../../contracts/prompt-registry.schema.json) | Versioned prompts, inputs, outputs and budgets |
+| [OpenAPI contract](../../contracts/openapi.yaml) | Planned REST endpoints and server-sent progress |
+| [prompt baseline](../../prompts/README.md) | Prompt IDs, expected source, and implementation rules |
 
 JSON Schema uses draft 2020-12. API request and response schemas reference these files as design contracts. Generated OpenAPI and Go/TypeScript bindings must be validated together during implementation. This phase favors explicit fields over an attempt to fix every future internal detail.
 
@@ -49,7 +51,7 @@ These are initial resource budgets, not a promise that an entire flow fits withi
 
 ## Fixtures and evaluation
 
-[The mixed fixture](../testdata/mixed-monolith/README.md) deliberately spreads one checkout flow across TypeScript, Go, Python, SQL, and deployment configuration. It includes a cross-language event connection, a cycle, an unused similarly named function, and an intentionally absent consumer. [The sparse fixture](../testdata/sparse-repo/README.md) contains no manifest, route, or deployment evidence. [The materializer](../scripts/materialize_fixtures.py) creates two actual local Git repositories: one committed and one with an unborn HEAD. Expected answers and prohibited claims are in [the evaluation cases](../evals/cases.json).
+[The mixed fixture](../../testdata/mixed-monolith/README.md) deliberately spreads one checkout flow across TypeScript, Go, Python, SQL, and deployment configuration. It includes a cross-language event connection, a cycle, an unused similarly named function, and an intentionally absent consumer. [The sparse fixture](../../testdata/sparse-repo/README.md) contains no manifest, route, or deployment evidence. [The materializer](../../scripts/materialize_fixtures.py) creates two actual local Git repositories: one committed and one with an unborn HEAD. Expected answers and prohibited claims are in [the evaluation cases](../../testdata/evals/cases.json).
 
 These small fixtures establish behavior and security invariants; they are not performance benchmarks or representative monoliths. The cases are draft until a maintainer reviews the expected findings. Freeze reviewed cases before tuning retrieval. Add larger public or synthetic repositories later, with their revision and expected evidence frozen before tuning.
 

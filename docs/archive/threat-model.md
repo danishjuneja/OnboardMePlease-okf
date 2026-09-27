@@ -1,3 +1,5 @@
+> Historical document. Current behavior is described in [the architecture guide](../architecture.md).
+
 # Phase 0 threat and data-flow model
 
 ## Assets and trust boundaries

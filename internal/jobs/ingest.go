@@ -14,7 +14,6 @@ import (
 	"onboardmeplease/internal/config"
 	"onboardmeplease/internal/index"
 	"onboardmeplease/internal/knowledge"
-	"onboardmeplease/internal/providers"
 	"onboardmeplease/internal/repository"
 )
 
@@ -107,12 +106,6 @@ func (worker *IngestWorker) Work(ctx context.Context, job *river.Job[IngestArgs]
 	}
 	if _, err := knowledge.Build(ctx, worker.DB, job.Args.RepositoryID, job.Args.SnapshotID); err != nil {
 		return fmt.Errorf("snapshot overview generation failed: %w", err)
-	}
-	if adapter, e := providers.ConfiguredGeneration(worker.Settings); e == nil && (adapter.Kind == "local" || input.PrivacyMode == "cloud_opt_in") {
-		_, err = river.ClientFromContext[pgx.Tx](ctx).Insert(ctx, SynthesisArgs{RepositoryID: job.Args.RepositoryID, SnapshotID: job.Args.SnapshotID}, nil)
-		if err != nil {
-			return err
-		}
 	}
 	return nil
 }

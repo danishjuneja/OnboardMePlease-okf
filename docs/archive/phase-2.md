@@ -1,3 +1,5 @@
+> Historical document. Current behavior is described in [the architecture guide](../architecture.md).
+
 # Phase 2: evidence, search, and bounded graphs
 
 The Go worker now indexes approved files after immutable GitHub capture. It stores deterministic, line-addressable text chunks in PostgreSQL and exposes exact/lexical search plus a read-only source viewer. Search and evidence endpoints check the requested repository and snapshot before reading indexed data. The inventory distinguishes analyzed, pending, excluded, unsupported, and failed artifacts. An analyzed file is searchable; it is not a claim that the tool understands its runtime behavior.

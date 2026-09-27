@@ -1,3 +1,5 @@
+> Historical document. Current behavior is described in [the architecture guide](../architecture.md).
+
 # Phase 1 implementation and verification
 
 This records the earlier foundation milestone. [Phase 2](phase-2.md) describes the current evidence and search implementation.

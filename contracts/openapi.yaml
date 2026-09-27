@@ -23,10 +23,10 @@ paths:
         content:
           application/json:
             schema:
-              $ref: '../contracts/repository.schema.json#/$defs/RepositoryInput'
+              $ref: './repository.schema.json#/$defs/RepositoryInput'
       responses:
         '202':
-          description: Repository accepted for analysis
+          description: Repository accepted for capture and indexing
           content:
             application/json:
               schema:
@@ -79,7 +79,7 @@ paths:
           description: Snapshot metadata
           content:
             application/json:
-              schema: { $ref: '../contracts/repository.schema.json#/$defs/Snapshot' }
+              schema: { $ref: './repository.schema.json#/$defs/Snapshot' }
         '403': { $ref: '#/components/responses/Problem' }
         '404': { $ref: '#/components/responses/Problem' }
   /v1/repositories/{repositoryId}/snapshots/{snapshotId}/coverage:
@@ -94,7 +94,7 @@ paths:
           description: Snapshot coverage
           content:
             application/json:
-              schema: { $ref: '../contracts/repository.schema.json#/$defs/Coverage' }
+              schema: { $ref: './repository.schema.json#/$defs/Coverage' }
         '403': { $ref: '#/components/responses/Problem' }
   /v1/repositories/{repositoryId}/snapshots/{snapshotId}/index:
     post:
@@ -205,7 +205,7 @@ paths:
           description: Overview and limitations
           content:
             application/json:
-              schema: { $ref: '../contracts/analysis.schema.json#/$defs/Overview' }
+              schema: { $ref: './analysis.schema.json#/$defs/Overview' }
         '403': { $ref: '#/components/responses/Problem' }
         '404': { $ref: '#/components/responses/Problem' }
   /v1/repositories/{repositoryId}/snapshots/{snapshotId}/overview/inventory:
@@ -223,41 +223,6 @@ paths:
           schema: { type: integer, minimum: 1, maximum: 500 }
       responses:
         '200': { description: Artifact status, category, and reason codes }
-        '404': { $ref: '#/components/responses/Problem' }
-  /v1/repositories/{repositoryId}/snapshots/{snapshotId}/overview/notes:
-    post:
-      operationId: addOverviewNote
-      summary: Retain a local correction attached to a current overview claim
-      parameters:
-        - $ref: '#/components/parameters/RepositoryId'
-        - $ref: '#/components/parameters/SnapshotId'
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              type: object
-              additionalProperties: false
-              required: [claim_id, note]
-              properties:
-                claim_id: { type: string }
-                note: { type: string, minLength: 1, maxLength: 2000 }
-      responses:
-        '201': { description: Correction retained without automatic human verification }
-        '422': { $ref: '#/components/responses/Problem' }
-  /v1/repositories/{repositoryId}/snapshots/{snapshotId}/overview/notes/{noteId}:
-    delete:
-      operationId: deleteOverviewNote
-      summary: Remove one local correction from the selected snapshot
-      parameters:
-        - $ref: '#/components/parameters/RepositoryId'
-        - $ref: '#/components/parameters/SnapshotId'
-        - name: noteId
-          in: path
-          required: true
-          schema: { type: integer, minimum: 1 }
-      responses:
-        '204': { description: Correction removed }
         '404': { $ref: '#/components/responses/Problem' }
   /v1/repositories/{repositoryId}/snapshots/{snapshotId}/analysis:
     get:
@@ -330,7 +295,7 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '../contracts/answer.schema.json'
+                $ref: './answer.schema.json'
         '404': { $ref: '#/components/responses/Problem' }
         '422': { $ref: '#/components/responses/Problem' }
   /v1/repositories/{repositoryId}/snapshots/{snapshotId}/evidence/{evidenceId}:
@@ -349,7 +314,7 @@ paths:
           description: Sanitized evidence; never raw excluded secret content
           content:
             application/json:
-              schema: { $ref: '../contracts/evidence.schema.json#/$defs/Evidence' }
+              schema: { $ref: './evidence.schema.json#/$defs/Evidence' }
         '403': { $ref: '#/components/responses/Problem' }
         '404': { $ref: '#/components/responses/Problem' }
   /v1/repositories/{repositoryId}/snapshots/{snapshotId}/knowledge/export:

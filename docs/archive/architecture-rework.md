@@ -1,8 +1,10 @@
+> Historical document. Current behavior is described in [the architecture guide](../architecture.md).
+
 # Architecture rework: repository understanding before feature expansion
 
 Date: 2026-09-25. Status: core implementation delivered; live quality evaluation and platform evidence are recorded in rework-verification.md.
 
-This document restores the user's original data flow and defines the next bounded changes. It takes precedence over the earlier milestone ordering where they conflict. It preserves the product contract in the [implementation plan](../implementation-plan.md), the privacy boundary, and the user's decision to remove local repository input. The existing Phase 3 implementation remains an experimental preview, not a completed synthesis milestone.
+This document restores the user's original data flow and defines the next bounded changes. It takes precedence over the earlier milestone ordering where they conflict. It preserves the product contract in the [implementation plan](implementation-plan.md), the privacy boundary, and the user's decision to remove local repository input. The existing Phase 3 implementation remains an experimental preview, not a completed synthesis milestone.
 
 ## 1. The result we are building
 
@@ -95,7 +97,7 @@ Full synthesis needs a configured generation provider. Strict-local mode require
 
 ### R0 — Cleanup and quality baseline
 
-Remove the experimental purpose interpretation from publication, keep useful source declarations visible, and make the current synthesis gap explicit. Reuse [the existing evaluation cases](../evals/cases.json) rather than adding another harness. Their maintainer-review status is still pending; validate expected findings before using them to tune output. The mixed-monolith fixture already covers paid cancellation, a Python worker, event gaps, and a persistence stub.
+Remove the experimental purpose interpretation from publication, keep useful source declarations visible, and make the current synthesis gap explicit. Reuse [the existing evaluation cases](../../testdata/evals/cases.json) rather than adding another harness. Their maintainer-review status is still pending; validate expected findings before using them to tune output. The mixed-monolith fixture already covers paid cancellation, a Python worker, event gaps, and a persistence stub.
 
 Gate: headings and generic keywords never become repository purpose; indexed-file counts are not presented as semantic coverage. Record a baseline overview and answers/gaps for the existing fixtures and pinned real snapshots. This is the R0 acceptance criterion.
 
@@ -123,4 +125,4 @@ The user authorized completing this sequence on 2026-09-25. Runtime changes now 
 
 The stack is unchanged. No new database, orchestration framework, parser pack, correction feature, hosting system or UI library was added. Migration 006 is additive and preserves previous snapshots and notes. Model outputs and model-reported gaps receive source-support assessment; partially supported or rejected wording is not published as accepted content. Local and cloud generation adapters enforce the same privacy boundary as embeddings.
 
-[Verification and remaining release limits](rework-verification.md) records actual tests and live findings. R1/R2 cannot be considered generally proven from synthetic fixtures alone. R3 measurements determine whether extra retrieval machinery is justified; a capability's existence is not evidence that it improved the answer.
+[Verification and remaining release limits](../verification-history.md) records actual tests and live findings. R1/R2 cannot be considered generally proven from synthetic fixtures alone. R3 measurements determine whether extra retrieval machinery is justified; a capability's existence is not evidence that it improved the answer.

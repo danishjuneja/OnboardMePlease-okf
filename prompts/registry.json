@@ -1,7 +1,7 @@
 {
   "registry_version": "1.0.0",
   "agent_template_ref": "templates/A00.txt",
-  "agent_checksum": "ba0347ac8c99cee7834162ec91cfe7870666959cfffef5b58b4d2964f6621a10",
+  "agent_checksum": "f8c8df116bf8edaa8e3e010e94c8b6fa694e794c167188d06b895dba66fdadf7",
   "prompts": [
     {
       "id": "P00",

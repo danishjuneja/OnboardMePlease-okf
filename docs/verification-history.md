@@ -1,6 +1,6 @@
-# Architecture rework verification
+# Historical verification record
 
-Date: 2026-09-25. This is an implementation/evaluation record, not a claim of universal repository understanding.
+Recorded on 2026-09-25. This record predates the 2026-09-28 simplification and directory cleanup; commands and planner/UI behavior below describe that earlier revision, not verification of the current tree. This is an implementation/evaluation record, not a claim of universal repository understanding.
 
 ## Delivered path
 
@@ -38,7 +38,7 @@ A broad UI question without vectors initially returned no candidates because con
 
 The next UI answer retrieved source and OKF and correctly traced the backend, but omitted the second chunk of `rag.py`, leaving response construction unresolved. Retrieval now reads one immediately adjacent chunk on each side of selected source within the same budget. The database regression verifies that it retrieves the continuation and does not recursively walk the file. Earlier synthetic ablation numbers above predate this adjacency change; they are not presented as new measurements of the final retrieval variant.
 
-The final live retry retrieved 10 source chunks and five OKF concepts without requiring vectors. Its accepted answer covered browser state and HTTP requests, API validation/failure paths, splitting, OpenAI embeddings, persistent Chroma storage, repository-scoped retrieval, and Anthropic generation. Both `rag.py` chunks and the frontend chunks were available. The answer rendered in the browser, and its `rag.py:81–94` citation opened the expected source. No static graph links were reported for this Python/TypeScript snapshot, consistent with the available parser coverage. Provider/model output varies; this successful example is not a guarantee for every question.
+The final live retry retrieved 10 source chunks and five OKF concepts without requiring vectors. Its accepted answer covered browser state and HTTP requests, API validation/failure paths, splitting, OpenAI embeddings, persistent Chroma storage, repository-scoped retrieval, and Anthropic generation. Both `rag.py` chunks and the frontend chunks were available. The answer rendered in the browser, and its `rag.py:81â€“94` citation opened the expected source. No static graph links were reported for this Python/TypeScript snapshot, consistent with the available parser coverage. Provider/model output varies; this successful example is not a guarantee for every question.
 
 Local artifacts for this check are `work/rework-reference-overview.json`, `work/rework-reference-answer-final.json`, and `work/rework-reference.zip`. The final overview still flags the excluded repository-loader implementation instead of inventing its GitHub fetch behavior. All source-code changes passed the Go suite, vet, frontend build, database regressions, prompt/schema checks, and whitespace check before handoff.
 

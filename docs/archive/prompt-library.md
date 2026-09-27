@@ -1,3 +1,5 @@
+> Historical document. Current behavior is described in [the architecture guide](../architecture.md).
+
 # Repository Explorer — baseline prompt library
 
 Status: proposed implementation prompts, not benchmarked production prompts. This document supplies actual template text. During implementation, split the templates into versioned files with JSON Schemas, fixtures and a registry. No real keys, repository contents or credentials belong in these templates.

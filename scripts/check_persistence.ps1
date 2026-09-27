@@ -1,6 +1,6 @@
 param(
     [string]$BaseUrl = 'http://127.0.0.1:8765',
-    [string]$ResultsFile = 'work/phase1-smoke.json'
+    [string]$ResultsFile = 'work/capture-smoke.json'
 )
 
 $ErrorActionPreference = 'Stop'

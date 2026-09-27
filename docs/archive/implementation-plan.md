@@ -1,14 +1,16 @@
+> Historical document. Current behavior is described in [the architecture guide](../architecture.md).
+
 # Repository Explorer — implementation plan
 
-Status: original product plan, superseded in implementation order by the [architecture rework](docs/architecture-rework.md). As of 2026-09-25, the core rework connects source synthesis, technical overviews, searchable OKF, bounded retrieval and source-grounded questions. See the [verification record](docs/rework-verification.md) for tested behavior and remaining release limits. The milestones below retain the original scope; their presence does not mean every future release requirement is implemented. The [Phase 3 preview](docs/phase-3.md) is historical.
+Status: original product plan, superseded in implementation order by the [architecture rework](architecture-rework.md). As of 2026-09-25, the core rework connects source synthesis, technical overviews, searchable OKF, bounded retrieval and source-grounded questions. See the [verification record](../verification-history.md) for tested behavior and remaining release limits. The milestones below retain the original scope; their presence does not mean every future release requirement is implemented. The [Phase 3 preview](phase-3.md) is historical.
 
 This plan incorporates the agreed architecture and four release requirements: portable deployment, a complete versioned prompt library, protection of secrets, and reproducible setup documentation. “Repository Explorer” is a working label, not a final product name.
 
 Companion documents:
 
-- [Architecture rework and reference data flow](docs/architecture-rework.md): current scope, implementation gaps, cleanup, and acceptance gates.
-- [Prompt library](docs/prompt-library.md): implementation-agent handoff and runtime prompt templates.
-- [README contract](docs/readme-contract.md): required installation instructions and documentation verification.
+- [Architecture rework and reference data flow](architecture-rework.md): current scope, implementation gaps, cleanup, and acceptance gates.
+- [Prompt library](prompt-library.md): implementation-agent handoff and runtime prompt templates.
+- [README contract](readme-contract.md): required installation instructions and documentation verification.
 
 ## 1. Product contract
 
@@ -217,7 +219,7 @@ CONTRIBUTING.md
 
 ## 11. Milestones and acceptance gates
 
-The milestones below retain the original feature contract. Execute the revised R0-R3 sequence in the [architecture rework](docs/architecture-rework.md) before expanding scope. M3 is not complete: citation presence and valid OKF structure do not establish repository understanding.
+The milestones below retain the original feature contract. Execute the revised R0-R3 sequence in the [architecture rework](architecture-rework.md) before expanding scope. M3 is not complete: citation presence and valid OKF structure do not establish repository understanding.
 
 ### M0 — contracts and evaluation fixtures
 

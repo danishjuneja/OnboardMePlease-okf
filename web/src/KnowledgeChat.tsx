@@ -7,12 +7,12 @@ type Answer = {
  diagram: { from: string; to: string; kind: string; evidence_id: string }[]
 }
 type Props = {
- base: string; session: { csrf_token: string; generation_available: boolean; generation_provider: string; generation_model: string }
+ running: boolean; base: string; session: { csrf_token: string; generation_available: boolean; generation_provider: string; generation_model: string }
  onQueued: (job: { repository_id: string; snapshot_id: string; job_id: string; state: string }) => void
  onEvidence: (id: string) => void
 }
 
-export default function KnowledgeChat({ base, session, onQueued, onEvidence }: Props) {
+export default function KnowledgeChat({ running, base, session, onQueued, onEvidence }: Props) {
  const [answers, setAnswers] = useState<Answer[]>([])
  const [question, setQuestion] = useState('')
  const [parent, setParent] = useState('')
@@ -55,15 +55,15 @@ export default function KnowledgeChat({ base, session, onQueued, onEvidence }: P
  return <section className="panel">
   <h2>Understand this repository</h2>
   {session.generation_available ? <>
-   <p className="hint">Generation: {session.generation_provider} · {session.generation_model}. Each run reviews up to 8 source batches; repeat to resume large repositories.</p>
+   <p className="hint">Generation: {session.generation_provider} Â· {session.generation_model}. Analysis reviews up to 8 source batches per run. Cloud analysis and questions incur API charges.</p>
    {session.generation_provider === 'cloud' && <label className="consent"><input type="checkbox" checked={cloudConsent} onChange={e => setCloudConsent(e.target.checked)} />Allow cloud analysis and questions for this repository. Approved source and questions will be sent to OpenAI.</label>}
-   <button className="secondary" disabled={busy || (session.generation_provider === 'cloud' && !cloudConsent)} onClick={analyze}>Analyze or resume overview</button>
+   <button className="secondary" disabled={running || busy || (session.generation_provider === 'cloud' && !cloudConsent)} onClick={analyze}>Analyze or resume overview</button>
    <p className="hint">Source and OKF concepts are searched together. Every answer reopens source and checks its claims. Static analysis can leave runtime behavior unresolved.</p>
    <form onSubmit={ask}>
     <label>Technical question<textarea required maxLength={2000} value={question} onChange={e => setQuestion(e.target.value)} placeholder="What happens when a customer cancels after payment?" /></label>
-    <div className="overview-actions"><button className="primary" disabled={busy || !question.trim()}>Ask</button>
+    <div className="overview-actions"><button className="primary" disabled={running || busy || !question.trim()}>Ask</button>
     {parent && <button type="button" className="link-button" onClick={() => setParent('')}>Start a new question</button>}</div>
-    <p className="hint">{busy ? 'Reading and checking source…' : parent ? 'Following up on the previous answer in this snapshot.' : 'New question in this snapshot.'}</p>
+    <p className="hint">{busy ? 'Reading and checking sourceâ€¦' : parent ? 'Following up on the previous answer in this snapshot.' : 'New question in this snapshot.'}</p>
    </form>
   </> : <p>Evidence search is available. Configure a generation provider and model on the server to create an overview and ask technical questions.</p>}
   {error && <p className="error" role="alert">{error}</p>}
@@ -71,9 +71,9 @@ export default function KnowledgeChat({ base, session, onQueued, onEvidence }: P
    <h3>{answer.question}</h3><p className="hint">{answer.retrieval}</p>
    {answer.claims.map((claim, i) => <div key={i}><p>{claim.text}</p>
     {claim.assumption && <p className="hint">Inference limit: {claim.assumption}</p>}
-    <div className="citation-row">{claim.evidence_ids.map(id => { const source = answer.sources.find(s => s.evidence_id === id); return <button key={id} className="citation" onClick={() => onEvidence(id)}>{source ? `${source.path}:${source.start_line}–${source.end_line}` : id.slice(0, 8)}</button> })}</div>
+    <div className="citation-row">{claim.evidence_ids.map(id => { const source = answer.sources.find(s => s.evidence_id === id); return <button key={id} className="citation" onClick={() => onEvidence(id)}>{source ? `${source.path}:${source.start_line}â€“${source.end_line}` : id.slice(0, 8)}</button> })}</div>
    </div>)}
-   {answer.diagram.length > 0 && <details><summary>Static source relationships</summary><ul>{answer.diagram.map((edge, i) => <li key={i}><code>{edge.from}</code> → <code>{edge.to}</code> · {edge.kind} <button className="citation" onClick={() => onEvidence(edge.evidence_id)}>Source</button></li>)}</ul></details>}
+   {answer.diagram.length > 0 && <details><summary>Static source relationships</summary><ul>{answer.diagram.map((edge, i) => <li key={i}><code>{edge.from}</code> â†’ <code>{edge.to}</code> Â· {edge.kind} <button className="citation" onClick={() => onEvidence(edge.evidence_id)}>Source</button></li>)}</ul></details>}
    {answer.concepts.length > 0 && <details><summary>OKF knowledge used ({answer.concepts.length})</summary>{answer.concepts.map(concept => <details key={concept.id}><summary>{concept.title}</summary><pre>{concept.markdown}</pre></details>)}</details>}
    {answer.gaps.length > 0 && <details open><summary>Evidence gaps and limits</summary><ul>{answer.gaps.map((gap, i) => <li key={i}>{gap}</li>)}</ul></details>}
    <button className="link-button" onClick={() => setParent(answer.id)}>Follow up on this answer</button>

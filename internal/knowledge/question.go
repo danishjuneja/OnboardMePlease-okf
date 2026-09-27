@@ -78,22 +78,12 @@ func AskWith(ctx context.Context, pool *pgxpool.Pool, c config.Config, model pro
 		}
 		cursor = prior.ParentID
 	}
-	var plan struct {
-		Queries []string `json:"queries"`
+	// Search the question directly; follow-ups also reuse prior source IDs.
+	// Avoid a planning model call before we know whether source exists.
+	queries := []string{answer.Question}
+	if len(priorQuestions) > 0 {
+		queries = append(queries, priorQuestions[0])
 	}
-	err := grounding.Run(ctx, model, policy, "P05", "question-plan", map[string]any{"question": answer.Question, "prior_user_questions_newest_first": priorQuestions}, &plan)
-	if err != nil {
-		return answer, err
-	}
-	if len(plan.Queries) > 3 {
-		return answer, errors.New("planner exceeded query budget")
-	}
-	for _, q := range plan.Queries {
-		if len(q) > 300 {
-			return answer, errors.New("planner exceeded query size")
-		}
-	}
-	queries := append([]string{answer.Question}, plan.Queries...)
 	retrieved, err := Retrieve(ctx, pool, c, policy, snapshot, queries, uniqueStrings(priorIDs), options)
 	if err != nil {
 		return answer, err

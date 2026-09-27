@@ -1,6 +1,8 @@
+> Historical document. Current behavior is described in [the architecture guide](../architecture.md).
+
 # Phase 3: technical overview and OKF
 
-Historical record: the deterministic purpose heuristics described below were removed by the architecture rework. See [current verification](rework-verification.md) for the implemented synthesis and question pipeline.
+Historical record: the deterministic purpose heuristics described below were removed by the architecture rework. See [current verification](../verification-history.md) for the implemented synthesis and question pipeline.
 
 Status at the initial 2026-09-25 review: experimental implementation, M3 incomplete. The purpose heuristics failed live quality checks, including promoting generic terms such as “address” and “hello.” The [architecture rework](architecture-rework.md) defined their removal and replacement with source-grounded synthesis. The description and verification below record that earlier implementation; passing its structural checks did not establish that its explanations were correct.
 

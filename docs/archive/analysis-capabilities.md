@@ -1,3 +1,5 @@
+> Historical document. Current behavior is described in [the architecture guide](../architecture.md).
+
 # Analysis capability contract
 
 The application reports capabilities for each artifact and each snapshot. “Language agnostic” means the repository model, search, source citations, and failure behavior are common. It does not mean every language has compiler-accurate call resolution.

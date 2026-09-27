@@ -1,8 +1,10 @@
+> Historical document. Current behavior is described in [the architecture guide](../architecture.md).
+
 # ADR 0001: layered repository analysis
 
 Status: accepted for the first implementation. Date: 2026-09-24.
 
-Implementation sequence clarified on 2026-09-25 in the [architecture rework](../architecture-rework.md). The layered architecture remains: source evidence and graph produce initial overview/OKF knowledge, and both knowledge and source feed question retrieval. The deterministic overview preview is not the planned synthesis stage; extra frameworks and UI dependencies are deferred while that gap is addressed.
+Implementation sequence clarified on 2026-09-25 in the [architecture rework](architecture-rework.md). The layered architecture remains: source evidence and graph produce initial overview/OKF knowledge, and both knowledge and source feed question retrieval. The deterministic overview preview is not the planned synthesis stage; extra frameworks and UI dependencies are deferred while that gap is addressed.
 
 ## Context
 
