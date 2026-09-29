@@ -1,47 +1,29 @@
-# Architecture
+# Local evidence CLI
 
-The service explains captured source without deploying or executing the repository. Its useful output is a technical overview and answers with inspectable source citations.
+`cmd/omp` parses the six commands. `internal/engine` owns the workspace, SQLite store, indexing, Go relationship extraction, retrieval and claim lifecycle. Files separate these responsibilities without empty packages or provider abstractions. `skills/omp-investigate` is the canonical agent workflow. The former service is recoverable at Git revision `c6697e2`.
 
-## Data flow
+The CLI runs Git inventory commands and reads source; it has no HTTP server, generation model, API client, database server, queue or daemon. SQLite and FTS5 are embedded using the pure-Go modernc driver. Installation/building requires dependencies to have been provisioned; the compiled CLI does not download them. Go type extraction never executes a repository build or downloads packages.
 
-1. Capture a public, credential-free GitHub URL at an immutable commit. Scan and inventory files; do not run repository scripts.
-2. Index readable source into citable chunks. Go syntax analysis adds declarations and direct static relationships. Other languages retain text search; optional SCIP import accepts only matching embedded source.
-3. On explicit analysis, review bounded source units and independently assess proposed claims. Cache successful units by source, model and prompt/schema fingerprints.
-4. Publish the overview and capability-oriented OKF concepts from accepted claims. Generated knowledge navigates to original evidence; it is not independent proof.
-5. Questions retrieve source and knowledge using direct lexical searches and optional vectors. Prior user questions and cited source IDs supply follow-up context. Bounded relationship expansion and adjacent source reads share the retrieval budget.
-6. Generate and assess the answer, then render citations from application-owned evidence IDs. Previous answers do not count as evidence.
+## Source lifecycle
 
-## Runtime and code ownership
+Each worktree stores its own `.onboard/cache/index.sqlite`. Git discovers tracked and eligible untracked files; deleted files, links, binary files, files over 2 MiB or with lines over 16 KiB, selected credential paths and secret-pattern matches are excluded. Generated source is retained with a label. `.onboard` and agent/graphify artifacts never enter raw-source indexing. The small config accepts one `exclude = ["relative/directory", "*.pattern"]` line.
 
-One Go application serves the embedded React UI, HTTP API and River workers. PostgreSQL/pgvector stores snapshots, inventories, evidence, static relationships, job state, cached analysis, knowledge and chat. Snapshot files live in the application data directory. River uses the same database; no separate worker, vector service or graph database is deployed.
+Updates hash source and reuse unchanged parsed chunks. Parsed checkpoints survive interruption. A second content audit precedes one atomic SQLite publication. Readers use a read transaction. Retrieval/traversal audit the current inventory, including additions, before treating the graph as current. This full audit has a real I/O cost on large repositories. If a process is killed while holding `cache/writer.lock`, inspect its PID and remove that file only after confirming the writer has stopped. SQLite handles transaction rollback; the next update resumes parsed checkpoints. Both normal update and `--verify` currently perform a full hash audit: there is no metadata-only fast path disguised as complete verification.
 
-| Backend package | Responsibility |
-|---|---|
-| `api` | HTTP routes, sessions, origin checks and request handling |
-| `config` | Runtime environment and secret-file configuration |
-| `repository` | Input validation, Git capture and inventory |
-| `privacy` | Secret filtering and provider authorization |
-| `index` | Source chunks, Go parsing and optional SCIP |
-| `graph` | Bounded static relationship traversal |
-| `knowledge` | Overview, synthesis, retrieval, answers and OKF rendering |
-| `grounding` | Structured model results and source support assessment |
-| `providers` | Generation and embedding adapters |
-| `jobs` | Durable capture, synthesis and embedding work |
-| `db` | Database migrations |
-| `webui` | Embedded UI serving |
+Evidence IDs include relative path, full file hash, source range and extractor version. Line shifts or file edits invalidate old IDs. Source reads verify hashes. Go declarations provide chunk boundaries; oversized declarations split into bounded continuations. Unsupported languages use bounded line chunks. Source kind distinguishes implementation, test, configuration and documentation.
 
-Migrations belong to the database package because the executable embeds and applies them. Prompt templates and schemas stay at the root because they are separately embedded Go packages. Frontend source and embedded output have different roles; moving them together would obscure the build boundary.
+## Relationships and limits
 
-## Budgets and uncertainty
+Go AST/type checking uses the active platform's build-file selection and local module source. Local declarations are linked by compiler object identity, never global name matching. Preinstalled standard-library export archives may be read; absent exports and external modules remain gaps. Calls, references, imports and source-order continuations are distinct. Interface calls remain dynamic dispatch. Function-valued arguments produce references, not invented runtime calls.
 
-An analysis run reviews up to 8 uncached units, each at most 12 chunks / 24,000 source bytes. At most 600 accepted claims are published. Summary source has its own budget; remaining work and oversized chunks stay explicit gaps. Questions use bounded context and relationship traversal (3 hops, 60 shared expansions and bounded fan-out). Optional embedding runs process at most 250 missing source chunks and 100 concepts.
+The first supported semantic surface is Go. Java, Scala, TypeScript and Python are text-only; there is no universal framework/event resolver. Build tags, missing dependencies and unsupported constructs limit resolution. All local Go relationships are recomputed when source generation changes; fine-grained reverse-dependent extraction is a later optimization. Claims that rely on relationships conservatively depend on the full eligible inventory because type resolution can change outside the endpoint files.
 
-Removing automatic synthesis and question planning avoids unsolicited analysis and one generation request per question. Direct searches may miss terms a planner would have expanded. Generation and source assessment remain separate to preserve the evidence contract. Per-run limits do not impose a dollar cap.
+FTS tokenization splits camelCase, snake_case and qualified identifiers. Search ranks lexical matches, promotes exact symbol/path matches and requires every significant query term for ordinary eligibility. This conservative rule is not a calibrated semantic confidence score; business-language paraphrases can miss. The skill handles that through direct source investigation. No vectors or embedding runtime are included (phase 7).
 
-The UI excludes correction editing, standalone graph controls, SCIP uploads, embedding controls and inventory paging. Advanced APIs remain available; stored notes and migrations are preserved. Private/local repositories, runtime tracing and shared Internet hosting are outside the current product scope.
+Traversal has direction, relationship-kind, depth, node and byte limits, cycle protection, and generation-bound cursors. Short cursor tokens refer to ignored local files; at most 128 recent cursor states are retained. Expired cursors require a new traversal. Evidence establishes a static relationship, not deployment or successful execution. High-degree branches and budget limits must remain visible rather than implying no further path exists.
 
-## Trust boundaries
+## Knowledge
 
-Source, comments, documentation, external indexes and questions are untrusted input. Secret scanning applies before searchable storage, model requests and exports, but can miss secrets or exclude useful code. Prompts cannot grant repository code tools or override application policy. Every query, cache and citation is scoped to a snapshot. Static relations and model claims do not prove runtime behavior.
+The agent authors structured findings. Apply validates generation, unit fingerprint, scope, source hashes and references. Claims retain their own evidence, conditions, assumptions and optional dependency scopes. A negative claim's scope hash detects additions as well as edits. Stale claims leave retrieval; current claims in the same document remain usable. Overlapping interpretations remain separate and may explicitly reference conflicts. Structural validation cannot establish semantic truth.
 
-Strict-local mode rejects cloud providers and has no cloud fallback. Cloud use requires installation-level configuration and repository consent. Credentials remain in backend secret files. The local single-user API enforces loopback/origin/session checks; it does not provide shared-host authentication or repository ACLs.
+SQLite commits documents and claims together. Deterministic JSON/Markdown exports are repairable from the committed records after a crash. Portable exports carry the original dependency hashes and are revalidated per claim when rebuilding the cache. They are never rebased onto changed source. They are managed results, not a manual-document ingestion channel. The skill defines answer and knowledge-building workflows and the query-scoped fallback to the user's existing agent.

@@ -1,0 +1,232 @@
+{
+  "schema_version": 1,
+  "result": {
+    "schema_version": 1,
+    "generation": "bb8b95413b6e10d681dc0677a561408c885dbff6f215a8208026208f490ae2e0",
+    "unit_id": "297018362741a1f380bb7f7239a7f9330909690c17a911d7bffa9099907ce400",
+    "fingerprint": "8d6571876a6ae1035cc44934ef39e3a1d2b7d2f1096eb0d93e2758807d8dbe9b",
+    "title": "Local evidence and knowledge lifecycle",
+    "reviewed_paths": [
+      "internal/engine/index.go",
+      "internal/engine/knowledge.go",
+      "internal/engine/retrieval.go",
+      "internal/engine/semantic.go"
+    ],
+    "assessment": "agent_assessed",
+    "claims": [
+      {
+        "id": "update",
+        "text": "Update hashes eligible source, reuses unchanged parsed chunks, rechecks inputs, and publishes changed index records in one SQLite transaction.",
+        "kind": "source_fact",
+        "evidence_ids": [
+          "0ab8743d0c0785aa3d2e275e80fa8e4bd7fe2bf5fed993b4b71e843a5b4443be",
+          "62f9c9ad9b75f56b49eff21749a3cbd07bcbc6e00b86110624d905d2b3c80d78",
+          "8aaa6fd273573c12c1c7c17336cd87bdce31336a16a5309df314b45db155093a"
+        ],
+        "relation_ids": [],
+        "conditions": [
+          "The current local CLI implementation and eligible repository inputs are used."
+        ],
+        "assumptions": [],
+        "dependency_scopes": [
+          "internal/engine",
+          "cmd/omp"
+        ],
+        "conflicts_with": []
+      },
+      {
+        "id": "search",
+        "text": "Ordinary lexical retrieval requires all significant query terms; exact symbol or path matches are also eligible. A miss produces no_match rather than unrelated padding.",
+        "kind": "source_fact",
+        "evidence_ids": [
+          "17f74055d7d92c86d2eb3f5d7e4a2bb106df408aa750ed43bbcf92cc9845191e",
+          "88d7ef557274994a6239e2cccf5d53c86b90d0055b959d8f70a49944a19e40db",
+          "8ba9cd15f1ebf0edf63210292b76a74b3dc3510f306ac603b7fc63d71de07bde"
+        ],
+        "relation_ids": [],
+        "conditions": [
+          "The current local CLI implementation and eligible repository inputs are used."
+        ],
+        "assumptions": [],
+        "dependency_scopes": [
+          "internal/engine",
+          "cmd/omp"
+        ],
+        "conflicts_with": []
+      },
+      {
+        "id": "apply",
+        "text": "Knowledge application validates unit identity, source fingerprints, evidence and dependency scopes, then commits records before rendering managed exports. Validation is structural rather than proof of semantic truth.",
+        "kind": "source_fact",
+        "evidence_ids": [
+          "976cd8141752c877fcb05fd31efe62cef33d5256e56781ccb271d31733cee941",
+          "a1f01af349aa0e2aac8df3a8940afc0964472ae35f6ca80343ba8d30f7dd9002",
+          "f2cf1a8e3e1faa4010b6c418ce407e4bf350384b9762a1837446635791b7189e"
+        ],
+        "relation_ids": [],
+        "conditions": [
+          "The current local CLI implementation and eligible repository inputs are used."
+        ],
+        "assumptions": [],
+        "dependency_scopes": [
+          "internal/engine",
+          "cmd/omp"
+        ],
+        "conflicts_with": []
+      },
+      {
+        "id": "dispatch",
+        "text": "Go call extraction follows local compiler object identities. Interface calls remain dynamic_dispatch without an invented concrete target.",
+        "kind": "source_fact",
+        "evidence_ids": [
+          "03c52068cbc50718a1b31f33adb7587ce9a977d49c7d795ddb7ea0d45cd31b99",
+          "9778e8a47aa9249d078fa6b3486c382f36468e9d5e03b2d7e9b5553e5f8dd886"
+        ],
+        "relation_ids": [],
+        "conditions": [
+          "The current local CLI implementation and eligible repository inputs are used."
+        ],
+        "assumptions": [],
+        "dependency_scopes": [
+          "internal/engine",
+          "cmd/omp"
+        ],
+        "conflicts_with": []
+      }
+    ],
+    "unresolved": [
+      "Large-repository latency and memory targets have not been measured.",
+      "Two independent agent environments have not been behaviorally validated.",
+      "Non-Go semantic and framework wiring remain outside the current extractor support."
+    ],
+    "facets": {
+      "conditions": "supported",
+      "downstream": "supported",
+      "entry_points": "supported",
+      "failures": "supported",
+      "state_changes": "supported",
+      "transactions": "supported"
+    }
+  },
+  "claims": [
+    {
+      "claim": {
+        "id": "2dcdba63286d3d430bacd75e639a3d268a11e0bc44094e7636123019b41d0df4",
+        "text": "Go call extraction follows local compiler object identities. Interface calls remain dynamic_dispatch without an invented concrete target.",
+        "kind": "source_fact",
+        "evidence_ids": [
+          "03c52068cbc50718a1b31f33adb7587ce9a977d49c7d795ddb7ea0d45cd31b99",
+          "9778e8a47aa9249d078fa6b3486c382f36468e9d5e03b2d7e9b5553e5f8dd886"
+        ],
+        "relation_ids": [],
+        "conditions": [
+          "The current local CLI implementation and eligible repository inputs are used."
+        ],
+        "assumptions": [],
+        "dependency_scopes": [
+          "internal/engine",
+          "cmd/omp"
+        ],
+        "conflicts_with": []
+      },
+      "document": "2951826d8ef499706f151d22ede6d47e267e8d0ce97944b6eebf055b98f09ad5",
+      "dependencies": {
+        "internal/engine/semantic.go": "815d793fec9f6abb34384d729d5b1dfac8d13014e17eaaea1625929b3bad7f8e",
+        "scope:cmd/omp": "91f5e95b280958bf87ac3ec47b1dfba8ce9f7824477577e162da0b02fc9f7246",
+        "scope:internal/engine": "e52a1076608af0ddd72ff9b281fb6bbaa34f9384bce517d7bbf8eefc29cac8f3"
+      },
+      "stale": false,
+      "configuration": "97b82fb9597e288c52b2e34dfb67d7732f9e509e03a6893044b584237dcac1ce"
+    },
+    {
+      "claim": {
+        "id": "c050141a7aef1cc9fe16fbedc02dc1cc1ac626be9c7e597c893754812e56c241",
+        "text": "Ordinary lexical retrieval requires all significant query terms; exact symbol or path matches are also eligible. A miss produces no_match rather than unrelated padding.",
+        "kind": "source_fact",
+        "evidence_ids": [
+          "17f74055d7d92c86d2eb3f5d7e4a2bb106df408aa750ed43bbcf92cc9845191e",
+          "88d7ef557274994a6239e2cccf5d53c86b90d0055b959d8f70a49944a19e40db",
+          "8ba9cd15f1ebf0edf63210292b76a74b3dc3510f306ac603b7fc63d71de07bde"
+        ],
+        "relation_ids": [],
+        "conditions": [
+          "The current local CLI implementation and eligible repository inputs are used."
+        ],
+        "assumptions": [],
+        "dependency_scopes": [
+          "internal/engine",
+          "cmd/omp"
+        ],
+        "conflicts_with": []
+      },
+      "document": "2951826d8ef499706f151d22ede6d47e267e8d0ce97944b6eebf055b98f09ad5",
+      "dependencies": {
+        "internal/engine/retrieval.go": "822277ee3a524a64e717d633b9d12bf4aafcb781b2bfe547b0ca7f5ee26db2db",
+        "scope:cmd/omp": "91f5e95b280958bf87ac3ec47b1dfba8ce9f7824477577e162da0b02fc9f7246",
+        "scope:internal/engine": "e52a1076608af0ddd72ff9b281fb6bbaa34f9384bce517d7bbf8eefc29cac8f3"
+      },
+      "stale": false,
+      "configuration": "97b82fb9597e288c52b2e34dfb67d7732f9e509e03a6893044b584237dcac1ce"
+    },
+    {
+      "claim": {
+        "id": "c5e10a84a3444e981d771af8af697a08f90540bb1d1c216a2618eeba53455f79",
+        "text": "Update hashes eligible source, reuses unchanged parsed chunks, rechecks inputs, and publishes changed index records in one SQLite transaction.",
+        "kind": "source_fact",
+        "evidence_ids": [
+          "0ab8743d0c0785aa3d2e275e80fa8e4bd7fe2bf5fed993b4b71e843a5b4443be",
+          "62f9c9ad9b75f56b49eff21749a3cbd07bcbc6e00b86110624d905d2b3c80d78",
+          "8aaa6fd273573c12c1c7c17336cd87bdce31336a16a5309df314b45db155093a"
+        ],
+        "relation_ids": [],
+        "conditions": [
+          "The current local CLI implementation and eligible repository inputs are used."
+        ],
+        "assumptions": [],
+        "dependency_scopes": [
+          "internal/engine",
+          "cmd/omp"
+        ],
+        "conflicts_with": []
+      },
+      "document": "2951826d8ef499706f151d22ede6d47e267e8d0ce97944b6eebf055b98f09ad5",
+      "dependencies": {
+        "internal/engine/index.go": "aee727a2e3aed5bff3cbd3c0623b63d4658c0c52e82b420be381f166a2da645c",
+        "scope:cmd/omp": "91f5e95b280958bf87ac3ec47b1dfba8ce9f7824477577e162da0b02fc9f7246",
+        "scope:internal/engine": "e52a1076608af0ddd72ff9b281fb6bbaa34f9384bce517d7bbf8eefc29cac8f3"
+      },
+      "stale": false,
+      "configuration": "97b82fb9597e288c52b2e34dfb67d7732f9e509e03a6893044b584237dcac1ce"
+    },
+    {
+      "claim": {
+        "id": "d3b2c27e1a9253e303c9b6b2272c52fc8d119ee61330db6ae56695bf5f1cbc19",
+        "text": "Knowledge application validates unit identity, source fingerprints, evidence and dependency scopes, then commits records before rendering managed exports. Validation is structural rather than proof of semantic truth.",
+        "kind": "source_fact",
+        "evidence_ids": [
+          "976cd8141752c877fcb05fd31efe62cef33d5256e56781ccb271d31733cee941",
+          "a1f01af349aa0e2aac8df3a8940afc0964472ae35f6ca80343ba8d30f7dd9002",
+          "f2cf1a8e3e1faa4010b6c418ce407e4bf350384b9762a1837446635791b7189e"
+        ],
+        "relation_ids": [],
+        "conditions": [
+          "The current local CLI implementation and eligible repository inputs are used."
+        ],
+        "assumptions": [],
+        "dependency_scopes": [
+          "internal/engine",
+          "cmd/omp"
+        ],
+        "conflicts_with": []
+      },
+      "document": "2951826d8ef499706f151d22ede6d47e267e8d0ce97944b6eebf055b98f09ad5",
+      "dependencies": {
+        "internal/engine/knowledge.go": "ae9040e86eee623f742d37ec908cfd9c9209edc9800792bc70b017ff6c41522e",
+        "scope:cmd/omp": "91f5e95b280958bf87ac3ec47b1dfba8ce9f7824477577e162da0b02fc9f7246",
+        "scope:internal/engine": "e52a1076608af0ddd72ff9b281fb6bbaa34f9384bce517d7bbf8eefc29cac8f3"
+      },
+      "stale": false,
+      "configuration": "97b82fb9597e288c52b2e34dfb67d7732f9e509e03a6893044b584237dcac1ce"
+    }
+  ]
+}

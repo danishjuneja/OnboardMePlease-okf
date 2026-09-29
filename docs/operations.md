@@ -1,49 +1,31 @@
-# Operation and configuration
+# Build and use
 
-Use [the README](../README.md) for first installation. This is a loopback-bound, single-user service. The existing verification record covers Windows with Docker Desktop and Linux amd64 containers; native service installation, other host platforms and backup/restore drills have not been fully verified.
+Install Go 1.27.1 and Git. From this repository:
 
-## Models
+```sh
+go build -o omp ./cmd/omp
+```
 
-The cloud Compose overlay configures generation with the default model recorded in `compose.cloud.yaml`. Set `GENERATION_MODEL` to override it before restarting: `$env:GENERATION_MODEL='your-model-id'` in PowerShell or `export GENERATION_MODEL='your-model-id'` in a POSIX shell. Generation needs structured JSON output support. Optional cloud embeddings use `text-embedding-3-small`.
+Use `omp.exe` on Windows. Put the binary on PATH, then run in any local Git repository:
 
-Save the API key in `secrets/openai_api_key.txt`, restrict the file to your user, and keep it outside source control. The backend reads the mounted file. Cloud consent allows approved source excerpts, derived knowledge and questions to reach the provider; `store: false` is a request setting, not a guarantee about broader retention.
+```sh
+omp update --json
+omp status --json
+omp search "processCancellation" --json
+omp evidence <id> --direction incoming --depth 2 --json
+omp knowledge pending --limit 20 --json
+omp knowledge apply result.json --dry-run --json
+omp knowledge apply result.json --json
+```
 
-Native local generation requires `GENERATION_PROVIDER=local`, `GENERATION_MODEL`, and `LOCAL_GENERATION_URL` set to the full `/v1/chat/completions` URL on a loopback IP. The endpoint must support strict `response_format.json_schema` and a `stop` finish reason. Compatibility has been checked with fixtures, not every model server. Local embeddings need the URL, model and dimensions below. Inside Docker, loopback points to the app container; a host model is not automatically reachable. Use native execution or an explicitly shared network namespace.
+`omp --help` lists options. Commands return one version-1 JSON envelope with generation, state, reason codes, warnings, truncation and data. IDs come from search, pending units, relationships and claim provenance. Diagnostics go to stderr. Successful retrieval, including `no_match`, exits zero; operational/argument/validation errors exit one with a reason code. Do not interpret failure as absent implementation.
 
-## Configuration
+`matched` means eligible evidence, `partial` means useful evidence with a gap or limit, `no_match` hands off to source investigation, `stale` requires refresh and `unavailable` is an operational failure. Relevance is not answer confidence. See the [result contract](../skills/omp-investigate/references/result-contract.md) for knowledge submission.
 
-Settings are read at startup. Compose supplies database credentials and container binding; `.env.example` documents Compose interpolation and native settings. Native environment variables are read directly by the executable.
+Cache is rebuildable and ignored by `.onboard/.gitignore`. Commit `.onboard/knowledge` selectively if appropriate for the repository. Keep submission files outside the eligible tree or inside the cache. Never remove a live writer's lock; after a crash, confirm its PID is gone before removing the lock and rerunning update. A failure exporting knowledge after commit is repaired by the next update.
 
-| Setting | Meaning / default |
-|---|---|
-| `APP_LISTEN_ADDR` | Native listener, `127.0.0.1:8765` |
-| `APP_CONTAINER_MODE` | `1` permits container binding to `0.0.0.0`; Compose publishes loopback |
-| `APP_DATA_DIR` | Snapshot files; native default is the OS user config directory under `OnboardMePlease` |
-| `APP_CAPTURE_TIMEOUT` | Capture deadline, `2h`; accepted range `1m`–`24h` |
-| `DATABASE_URL_FILE` | Preferred native connection file; takes precedence over `DATABASE_URL` |
-| `DATABASE_URL` | PostgreSQL connection URL |
-| `DATABASE_PASSWORD_FILE` | Optional password file applied to the URL's user |
-| `MODEL_MODE` | `strict_local` by default, or `cloud_opt_in` |
-| `GENERATION_PROVIDER` | `local` or `cloud`; absent means generation unavailable |
-| `GENERATION_MODEL` | Required model ID when generation is used |
-| `LOCAL_GENERATION_URL` | Local structured-generation endpoint |
-| `LOCAL_EMBEDDING_URL` | Optional local embeddings endpoint |
-| `LOCAL_EMBEDDING_MODEL` | Required with the embedding URL |
-| `LOCAL_EMBEDDING_DIMENSIONS` | Required with the embedding URL; `1`–`2000` |
-| `OPENAI_API_KEY_FILE` | Backend cloud credential file |
+## Agent installation
 
-## Storage and recovery
+There is one canonical skill: [omp-investigate](../skills/omp-investigate/SKILL.md). Copy its complete directory into an agent's supported skill directory. For Codex this can be a repository's `.agents/skills/omp-investigate`; for Claude Code it can be `.claude/skills/omp-investigate`. Alternatively point an agent that supports shell tools directly at the canonical SKILL.md. Keep only one maintained source; installed copies must be refreshed when upgrading.
 
-Compose keeps database state in `postgres_data` and snapshot files in `app_data`. Approved files live under `APP_DATA_DIR/snapshots/<snapshot-id>/files`; Git clones are temporary staging inputs. Migrations run at startup and preserve existing data.
-
-Use `docker compose stop` / `docker compose start` to stop and resume. When using cloud mode, use the same `-f compose.yaml -f compose.cloud.yaml` options for recreation or upgrades. `docker compose down -v` deletes persistent data. Do not regenerate the database password during an upgrade.
-
-For backup, stop the app and preserve a PostgreSQL backup and the matching `app_data` snapshot files together, with secret files protected separately. Restore both from the same backup point before starting the matching application version. A complete restore drill remains unverified; do not treat a successful compile as evidence of recoverability.
-
-## Troubleshooting
-
-- Use `docker compose ps`, `docker compose logs app`, and `docker compose exec app /app/onboardmeplease doctor` to check startup, Git and database availability.
-- HTTP 401 from generation means a rejected credential; 429 means quota or rate limiting; 400 usually means model/request configuration. Raw provider bodies are not returned to the UI.
-- Failed analysis retains completed source units. Fix the provider problem and use **Analyze or resume overview**; analysis failures do not automatically trigger repeated provider charges.
-- A partial overview means some source was not reviewed or accepted. Repeated analysis can cover remaining units; excluded or oversized content may remain unresolved.
-- With no model, source search still works. With no vectors, lexical source/knowledge retrieval still works. Refine an empty query with a symbol, handler or component name.
+These adapters contain no provider client and require the agent to invoke the installed CLI and parse JSON. Skill discovery and actual model behavior need verification in each agent installation; a compatible file format alone does not establish quality. A local agent is required for fully offline reasoning. The CLI itself runs without a network connection; a cloud agent retains its normal costs and source-handling behavior.

@@ -1,9 +1,0 @@
-Evaluate this technical repository answer against the supplied rubric and evidence. Assess
-technical correctness, source support, branch/condition coverage, cross-component links,
-appropriate uncertainty and unnecessary generic explanation. Check every major claim,
-including omissions that materially change behavior.
-
-Return per-rubric outcomes, unsupported_claims, missed_required_evidence, misleading_negatives,
-and concise justification. Do not reward fluent prose or citation count in place of support.
-Do not infer that code ran. Do not change the rubric or expected evidence. Your assessment
-is supplemental; do not state that it grants release approval or human verification.
