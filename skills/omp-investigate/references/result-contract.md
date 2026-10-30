@@ -34,7 +34,7 @@ Use exact `generation`, `unit_id`, `fingerprint`, paths and evidence IDs from th
 }
 ```
 
-Claim kinds are `source_fact`, `inference`, and `negative`. Inference requires explicit assumptions. Negative findings require a repository-relative directory/file scope (`.` means the complete eligible inventory). Scopes include additions and deletions, not just existing cited files. A relation ID must exist and have a target; unresolved dispatch is a gap, not accepted connection evidence.
+Claim kinds are `source_fact`, `inference`, and `negative`. Inference requires explicit assumptions. Negative findings require a repository-relative directory/file scope (`.` means the complete eligible inventory). Scopes include additions and deletions, not just existing cited files. A relation ID must exist, have a target, and not be a candidate; unresolved dispatch and candidate edges are navigation gaps, not accepted connection evidence.
 
 Facets accept `supported`, `unresolved`, or `not_applicable`. They are agent assessments. A partial review or unresolved facet leaves the unit pending. Reviewed paths may extend beyond the starting unit but must include an anchor within it. Conditions and assumptions travel with retrieved claims. Claim IDs are namespaced by document on storage; use stored IDs in `conflicts_with` to identify other findings. Documents group claims but do not turn several claims into independent corroboration.
 

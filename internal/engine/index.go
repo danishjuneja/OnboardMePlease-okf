@@ -15,6 +15,9 @@ import (
 )
 
 func parseFile(p string, b []byte) File {
+	return parseFileWithSyntax(p, b, nil)
+}
+func parseFileWithSyntax(p string, b []byte, analysis *syntaxAnalysis) File {
 	f := File{Path: p, Hash: ID(string(b)), Syntax: "text_only", Extractor: Version}
 	text := string(b)
 	lines := strings.SplitAfter(text, "\n")
@@ -62,6 +65,17 @@ func parseFile(p string, b []byte) File {
 			}
 		} else {
 			f.Syntax = "go_parse_error"
+		}
+	}
+	if analysis != nil {
+		f.Syntax = analysis.Syntax
+		f.SyntaxCalls = analysis.Calls
+		f.Requests = analysis.Requests
+		f.Events = analysis.Events
+		for _, d := range analysis.Declarations {
+			if d.Line > 0 && d.Line <= len(lines) && d.Name != "" {
+				cuts[d.Line] = d.Name
+			}
 		}
 	}
 	starts := []int{}
@@ -175,6 +189,7 @@ func (s *Store) Update(verify bool) (Envelope, error) {
 	}
 	head := s.W.Head()
 	files := map[string]File{}
+	var syntaxPaths []string
 	changed, reused := 0, 0
 	for _, p := range paths {
 		b, st, err := s.W.Read(p)
@@ -184,35 +199,83 @@ func (s *Store) Update(verify bool) (Envelope, error) {
 		}
 		hash := ID(string(b))
 		f, ok := old[p]
-		if ok && f.Hash == hash && f.Extractor == Version && s.Meta("config") == s.W.ConfigHash {
+		if ok && f.Hash == hash && f.Extractor == s.W.Extractor && s.Meta("config") == s.W.ConfigHash {
 			reused++
 		} else {
 			var cached string
 			if s.Q.QueryRow("SELECT payload FROM stages WHERE path=?", p).Scan(&cached) == nil {
 				var stage File
 				json.Unmarshal([]byte(cached), &stage)
-				if stage.Hash == hash && stage.Extractor == Version {
+				if stage.Hash == hash && stage.Extractor == s.W.Extractor {
 					f = stage
 				} else {
 					f = parseFile(p, b)
+					if syntaxSupported(s.W.SyntaxProbe, p) {
+						syntaxPaths = append(syntaxPaths, p)
+					}
 				}
 			} else {
 				f = parseFile(p, b)
+				if syntaxSupported(s.W.SyntaxProbe, p) {
+					syntaxPaths = append(syntaxPaths, p)
+				}
 			}
+			f.Extractor = s.W.Extractor
 			changed++
 		}
 		f.Size = st.Size()
 		f.Mtime = st.ModTime().UnixNano()
 		f.Mode = uint32(st.Mode())
-		if !ok || f.Hash != old[p].Hash {
-			if _, e = s.DB.Exec("INSERT OR REPLACE INTO stages VALUES (?,?)", p, encode(f)); e != nil {
-				return Envelope{}, e
-			}
-		}
 		for i := range f.Chunks {
 			f.Chunks[i].Text = ""
 		}
 		files[p] = f
+	}
+	processSyntax := func(batch []syntaxInput) error {
+		if len(batch) == 0 {
+			return nil
+		}
+		analyses, err := analyzeSyntax(s.W.SyntaxPython, batch)
+		if err != nil {
+			return err
+		}
+		for _, input := range batch {
+			previous := files[input.Path]
+			analysis := analyses[input.Path]
+			f := parseFileWithSyntax(input.Path, input.Source, &analysis)
+			f.Extractor, f.Size, f.Mtime, f.Mode = s.W.Extractor, previous.Size, previous.Mtime, previous.Mode
+			for i := range f.Chunks {
+				f.Chunks[i].Text = ""
+			}
+			files[input.Path] = f
+		}
+		return nil
+	}
+	var batch []syntaxInput
+	batchBytes := 0
+	for _, p := range syntaxPaths {
+		b, _, err := s.W.Read(p)
+		if err != nil || ID(string(b)) != files[p].Hash {
+			return Envelope{}, fmt.Errorf("tree_changed: %s", p)
+		}
+		if len(batch) > 0 && (len(batch) >= 32 || batchBytes+len(b) > 8<<20) {
+			if err = processSyntax(batch); err != nil {
+				return Envelope{}, err
+			}
+			batch, batchBytes = nil, 0
+		}
+		batch = append(batch, syntaxInput{Path: p, Source: b})
+		batchBytes += len(b)
+	}
+	if e = processSyntax(batch); e != nil {
+		return Envelope{}, e
+	}
+	for p, f := range files {
+		if oldf, ok := old[p]; !ok || f.Hash != oldf.Hash || f.Extractor != oldf.Extractor {
+			if _, e = s.DB.Exec("INSERT OR REPLACE INTO stages VALUES (?,?)", p, encode(f)); e != nil {
+				return Envelope{}, e
+			}
+		}
 	}
 	generation := manifest(files, s.W.ConfigHash)
 	edges := []Edge{}

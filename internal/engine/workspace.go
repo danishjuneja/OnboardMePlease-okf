@@ -16,9 +16,12 @@ import (
 )
 
 type Workspace struct {
-	Root       string
-	Excludes   []string
-	ConfigHash string
+	Root         string
+	Excludes     []string
+	ConfigHash   string
+	SyntaxPython string
+	SyntaxProbe  syntaxProbe
+	Extractor    string
 }
 
 func git(root string, args ...string) (string, error) {
@@ -27,6 +30,10 @@ func git(root string, args ...string) (string, error) {
 	return string(b), e
 }
 func Discover() (Workspace, error) {
+	return DiscoverVerified(false)
+}
+
+func DiscoverVerified(verifySyntax bool) (Workspace, error) {
 	cwd, e := os.Getwd()
 	if e != nil {
 		return Workspace{}, e
@@ -43,7 +50,13 @@ func Discover() (Workspace, error) {
 	if e != nil && !os.IsNotExist(e) {
 		return w, e
 	}
-	w.ConfigHash = ID(Version, string(b), runtime.GOOS, runtime.GOARCH, runtime.Version())
+	python, probe, syntaxKey, err := configureSyntax(w, verifySyntax)
+	if err != nil {
+		return w, err
+	}
+	w.SyntaxPython, w.SyntaxProbe = python, probe
+	w.Extractor = Version + ":" + syntaxKey
+	w.ConfigHash = ID(Version, string(b), runtime.GOOS, runtime.GOARCH, runtime.Version(), syntaxKey)
 	for _, line := range strings.Split(string(b), "\n") {
 		line = strings.TrimSpace(line)
 		if line == "" || strings.HasPrefix(line, "#") {
@@ -101,7 +114,7 @@ func (w Workspace) excluded(p string) bool {
 	}
 	for _, v := range strings.Split(strings.ToLower(p), "/") {
 		switch v {
-		case ".git", ".onboard", ".codex", ".claude", "graphify-out", "node_modules", "vendor", "secrets", ".ssh", ".aws":
+		case ".git", ".onboard", ".codex", ".claude", "node_modules", "vendor", "secrets", ".ssh", ".aws":
 			return true
 		}
 	}

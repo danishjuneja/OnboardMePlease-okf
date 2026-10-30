@@ -264,7 +264,29 @@ func extractGraph(w Workspace, files map[string]File) ([]Edge, []string) {
 			l.gaps = append(l.gaps, "semantic_unavailable:"+k)
 		}
 	}
-	l.gaps = append(l.gaps, "non_go_languages:text_only", "framework_wiring:agent_investigation", "go_build_context:"+build.Default.GOOS+"/"+build.Default.GOARCH)
+	if w.SyntaxPython == "" {
+		l.gaps = append(l.gaps, "non_go_languages:text_only")
+	} else {
+		candidates, gaps := syntaxEdges(w, files)
+		l.edges = append(l.edges, candidates...)
+		l.gaps = append(l.gaps, gaps...)
+		l.gaps = append(l.gaps, "non_go_semantics:syntax_candidates_only")
+		missing := map[string]bool{}
+		for p, f := range files {
+			if strings.HasPrefix(f.Syntax, "tree_sitter_") && strings.HasSuffix(f.Syntax, "_partial") {
+				l.gaps = append(l.gaps, "syntax_partial:"+p)
+			}
+			ext := strings.ToLower(path.Ext(p))
+			if f.Reason == "" && (ext == ".py" || ext == ".ts" || ext == ".tsx") && !syntaxSupported(w.SyntaxProbe, p) {
+				missing[ext] = true
+			}
+		}
+		for ext := range missing {
+			l.gaps = append(l.gaps, "syntax_grammar_unavailable:"+ext)
+		}
+	}
+	l.gaps = append(l.gaps, "framework_wiring:agent_investigation", "go_build_context:"+build.Default.GOOS+"/"+build.Default.GOARCH)
+	sort.Strings(l.gaps)
 	sort.Slice(l.edges, func(i, j int) bool { return l.edges[i].ID < l.edges[j].ID })
 	out := []Edge{}
 	last := ""

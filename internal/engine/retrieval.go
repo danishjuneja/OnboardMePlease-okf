@@ -48,9 +48,17 @@ type Hit struct {
 }
 
 func (s *Store) Search(q string, limit int) (Envelope, error) {
-	fresh, err := s.Audit()
-	if err != nil {
-		return Envelope{}, err
+	return s.search(q, limit, true)
+}
+
+func (s *Store) search(q string, limit int, audit bool) (Envelope, error) {
+	fresh := true
+	if audit {
+		var err error
+		fresh, err = s.Audit()
+		if err != nil {
+			return Envelope{}, err
+		}
 	}
 	terms := queryTerms(q)
 	r := s.Envelope("no_match", []Hit{})
@@ -233,6 +241,79 @@ type Traversal struct {
 	Cursor   string  `json:"cursor,omitempty"`
 }
 
+type NavigationMatch struct {
+	ID     string `json:"id"`
+	Kind   string `json:"kind"`
+	Reason string `json:"match_reason"`
+	Path   string `json:"path,omitempty"`
+	Symbol string `json:"symbol,omitempty"`
+}
+type Navigation struct {
+	Matches   []NavigationMatch `json:"matches"`
+	Seed      string            `json:"seed,omitempty"`
+	Traversal *Traversal        `json:"traversal,omitempty"`
+}
+
+// Navigate combines a search and one bounded traversal without duplicating
+// source payloads in the response. The first ranked source is the seed.
+func (s *Store) Navigate(q string, limit int, direction, kinds string, depth, nodes, bytes int) (Envelope, error) {
+	// Evidence performs the inventory audit after candidate selection. If no
+	// source is selected, audit before returning so additions cannot look absent.
+	result, err := s.search(q, limit, false)
+	if err != nil {
+		return result, err
+	}
+	hits, ok := result.Data.([]Hit)
+	if !ok {
+		return result, fmt.Errorf("invalid_search_result")
+	}
+	nav := Navigation{Matches: []NavigationMatch{}}
+	for _, hit := range hits {
+		match := NavigationMatch{ID: hit.ID, Kind: hit.Kind, Reason: hit.Reason}
+		if hit.Source != nil {
+			match.Path, match.Symbol = hit.Source.Path, hit.Source.Symbol
+			if nav.Seed == "" {
+				nav.Seed = hit.ID
+			}
+		}
+		nav.Matches = append(nav.Matches, match)
+	}
+	result.Data = nav
+	if nav.Seed == "" {
+		fresh, err := s.Audit()
+		if err != nil {
+			return result, err
+		}
+		if !fresh {
+			result.State = "stale"
+			result.Reasons = append(result.Reasons, "index_inputs_changed: run update")
+			return result, nil
+		}
+		if len(hits) > 0 {
+			result.State = "partial"
+			result.Reasons = append(result.Reasons, "no_source_seed: inspect matching knowledge with search")
+		}
+		return result, nil
+	}
+	walk, err := s.Evidence(nav.Seed, direction, kinds, depth, nodes, bytes, "")
+	if err != nil {
+		return result, err
+	}
+	if value, ok := walk.Data.(Traversal); ok {
+		nav.Traversal = &value
+	}
+	result.Data = nav
+	result.Reasons = append(result.Reasons, walk.Reasons...)
+	result.Warnings = append(result.Warnings, walk.Warnings...)
+	result.Truncated = result.Truncated || walk.Truncated
+	if walk.State == "stale" {
+		result.State = "stale"
+	} else if walk.State == "partial" || result.State == "partial" {
+		result.State = "partial"
+	}
+	return result, nil
+}
+
 func (s *Store) Evidence(id, dir, kinds string, depth, nodes, bytes int, continuation string) (Envelope, error) {
 	r := s.Envelope("matched", nil)
 	fresh, err := s.Audit()
@@ -243,6 +324,16 @@ func (s *Store) Evidence(id, dir, kinds string, depth, nodes, bytes int, continu
 		r.State = "stale"
 		r.Reasons = append(r.Reasons, "index_inputs_changed: run update before traversal")
 		return r, nil
+	}
+	var gaps []string
+	_ = json.Unmarshal([]byte(s.Meta("capability_gaps")), &gaps)
+	for _, gap := range gaps {
+		if strings.HasPrefix(gap, "syntax_candidates_truncated:") {
+			r.State = "partial"
+			r.Truncated = true
+			r.Reasons = append(r.Reasons, "syntax_candidates_truncated: inspect source directly")
+			break
+		}
 	}
 	c := Cursor{Generation: s.Meta("generation"), Root: id, Direction: dir, Kinds: kinds, MaxDepth: depth, Queue: []Visit{{ID: id, Depth: 0}}, Seen: []string{}}
 	if continuation != "" {
@@ -416,7 +507,7 @@ func (s *Store) saveCursor(c Cursor) (string, error) {
 	}
 	return id, nil
 }
-func (s *Store) Status() (Envelope, error) {
+func (s *Store) Status(verbose ...bool) (Envelope, error) {
 	fresh, auditErr := s.Audit()
 	if auditErr != nil {
 		return Envelope{}, auditErr
@@ -478,6 +569,10 @@ func (s *Store) Status() (Envelope, error) {
 	}
 	var gaps []string
 	json.Unmarshal([]byte(s.Meta("capability_gaps")), &gaps)
-	r := s.Envelope(state, map[string]any{"changed_files": changed, "inventory_files": len(files), "excluded_files": excluded, "go_syntax_files": syntax, "current_claims": current, "stale_claims": len(claims) - current, "head": s.Meta("head"), "verified_at": s.Meta("verified_at"), "verification": s.Meta("verification"), "embeddings": "not_implemented_phase_7", "capability_gaps": gaps})
+	data := map[string]any{"changed_files": changed, "inventory_files": len(files), "excluded_files": excluded, "go_syntax_files": syntax, "current_claims": current, "stale_claims": len(claims) - current, "head": s.Meta("head"), "verified_at": s.Meta("verified_at"), "verification": s.Meta("verification"), "embeddings": "not_implemented_phase_7", "capability_gap_count": len(gaps)}
+	if len(verbose) > 0 && verbose[0] {
+		data["capability_gaps"] = gaps
+	}
+	r := s.Envelope(state, data)
 	return r, nil
 }

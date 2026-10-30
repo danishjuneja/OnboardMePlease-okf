@@ -7,7 +7,7 @@ import (
 	"strings"
 )
 
-const Version = "omp-v1.0.0"
+const Version = "omp-v1.1.0"
 
 type Chunk struct {
 	ID        string `json:"id"`
@@ -23,26 +23,30 @@ type Chunk struct {
 	Generated bool   `json:"generated"`
 }
 type Edge struct {
-	ID         string `json:"id"`
-	From       string `json:"from"`
-	To         string `json:"to,omitempty"`
-	Kind       string `json:"kind"`
-	Resolution string `json:"resolution"`
-	Method     string `json:"method"`
-	Path       string `json:"path"`
-	Line       int    `json:"line"`
-	Target     string `json:"target"`
+	ID         string   `json:"id"`
+	From       string   `json:"from"`
+	To         string   `json:"to,omitempty"`
+	Kind       string   `json:"kind"`
+	Resolution string   `json:"resolution"`
+	Method     string   `json:"method"`
+	Path       string   `json:"path"`
+	Line       int      `json:"line"`
+	Target     string   `json:"target"`
+	Conditions []string `json:"conditions,omitempty"`
 }
 type File struct {
-	Path      string  `json:"path"`
-	Hash      string  `json:"hash"`
-	Size      int64   `json:"size"`
-	Mtime     int64   `json:"mtime"`
-	Mode      uint32  `json:"mode"`
-	Reason    string  `json:"excluded_reason,omitempty"`
-	Chunks    []Chunk `json:"chunks,omitempty"`
-	Syntax    string  `json:"syntax"`
-	Extractor string  `json:"extractor"`
+	Path        string          `json:"path"`
+	Hash        string          `json:"hash"`
+	Size        int64           `json:"size"`
+	Mtime       int64           `json:"mtime"`
+	Mode        uint32          `json:"mode"`
+	Reason      string          `json:"excluded_reason,omitempty"`
+	Chunks      []Chunk         `json:"chunks,omitempty"`
+	Syntax      string          `json:"syntax"`
+	Extractor   string          `json:"extractor"`
+	SyntaxCalls []syntaxCall    `json:"syntax_calls,omitempty"`
+	Requests    []syntaxRequest `json:"syntax_requests,omitempty"`
+	Events      []syntaxEvent   `json:"syntax_events,omitempty"`
 }
 type Unit struct {
 	ID          string   `json:"id"`
@@ -56,6 +60,7 @@ type Claim struct {
 	ID          string   `json:"id"`
 	Text        string   `json:"text"`
 	Kind        string   `json:"kind"`
+	Confidence  string   `json:"confidence,omitempty"`
 	Evidence    []string `json:"evidence_ids"`
 	Relations   []string `json:"relation_ids"`
 	Conditions  []string `json:"conditions"`

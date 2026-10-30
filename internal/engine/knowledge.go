@@ -235,6 +235,81 @@ func ReadResult(p string) (Result, error) {
 	}
 	return r, nil
 }
+
+// AddNote reuses the normal claim validation and portable export, but records
+// a focused finding without claiming that its containing unit was reviewed.
+func (s *Store) AddNote(text, kind string, evidence, assumptions []string, dry bool, confidence ...string) (Envelope, error) {
+	if strings.TrimSpace(text) == "" || len(evidence) == 0 || len(evidence) > 32 {
+		return Envelope{}, fmt.Errorf("invalid_note: text and 1..32 evidence IDs required")
+	}
+	if kind != "source_fact" && kind != "inference" {
+		return Envelope{}, fmt.Errorf("invalid_note_kind")
+	}
+	if kind == "inference" && (len(assumptions) == 0 || strings.TrimSpace(assumptions[0]) == "") {
+		return Envelope{}, fmt.Errorf("inference_requires_assumptions")
+	}
+	paths := map[string]bool{}
+	for _, id := range evidence {
+		chunk, err := s.Chunk(id)
+		if err != nil || !s.W.Current(chunk) {
+			return Envelope{}, fmt.Errorf("stale_or_unknown_evidence: %s", id)
+		}
+		paths[chunk.Path] = true
+	}
+	rows, err := s.Q.Query("SELECT payload FROM units ORDER BY id")
+	if err != nil {
+		return Envelope{}, err
+	}
+	var unit Unit
+	for rows.Next() {
+		var raw string
+		var u Unit
+		if err = rows.Scan(&raw); err != nil {
+			break
+		}
+		if err = json.Unmarshal([]byte(raw), &u); err != nil {
+			break
+		}
+		for _, id := range u.Evidence {
+			if id == evidence[0] {
+				unit = u
+				break
+			}
+		}
+		if unit.ID != "" {
+			break
+		}
+	}
+	if err == nil {
+		err = rows.Err()
+	}
+	rows.Close()
+	if err != nil {
+		return Envelope{}, err
+	}
+	if unit.ID == "" {
+		return Envelope{}, fmt.Errorf("unknown_evidence_unit")
+	}
+	reviewed := make([]string, 0, len(paths))
+	for p := range paths {
+		reviewed = append(reviewed, p)
+	}
+	sort.Strings(reviewed)
+	facets := map[string]string{}
+	for _, f := range []string{"entry_points", "conditions", "state_changes", "transactions", "downstream", "failures"} {
+		facets[f] = "unresolved"
+	}
+	level := ""
+	if len(confidence) > 0 {
+		level = confidence[0]
+	}
+	r := Result{Schema: 1, Generation: s.Meta("generation"), Unit: unit.ID, Fingerprint: unit.Fingerprint,
+		Title: "Note: " + text, Reviewed: reviewed, Assessment: "agent_assessed", Facets: facets,
+		Unresolved: []string{"Focused note; the unit was not fully assessed."},
+		Claims:     []Claim{{ID: "note", Text: text, Kind: kind, Confidence: level, Evidence: evidence, Assumptions: assumptions}}}
+	return s.Apply(r, dry)
+}
+
 func (s *Store) Apply(r Result, dry bool) (Envelope, error) {
 	unlock, e := s.Lock()
 	if e != nil {
@@ -312,6 +387,9 @@ func (s *Store) apply(r Result, dry bool) (Envelope, error) {
 		if c.Kind != "source_fact" && c.Kind != "inference" && c.Kind != "negative" {
 			return out, fmt.Errorf("invalid_claim_kind")
 		}
+		if c.Confidence != "" && c.Confidence != "low" && c.Confidence != "medium" && c.Confidence != "high" {
+			return out, fmt.Errorf("invalid_confidence")
+		}
 		if c.Kind == "inference" && len(c.Assumptions) == 0 {
 			return out, fmt.Errorf("inference_requires_assumptions")
 		}
@@ -341,7 +419,7 @@ func (s *Store) apply(r Result, dry bool) (Envelope, error) {
 			if er := json.Unmarshal([]byte(b), &edge); er != nil {
 				return out, er
 			}
-			if edge.To == "" {
+			if !relationSupportsClaim(edge) {
 				return out, fmt.Errorf("unresolved_relation_is_not_connection_evidence")
 			}
 			for _, ev := range []string{edge.From, edge.To} {
@@ -413,6 +491,10 @@ func (s *Store) apply(r Result, dry bool) (Envelope, error) {
 		return out, fmt.Errorf("knowledge_committed_export_pending: %w", e)
 	}
 	return out, nil
+}
+
+func relationSupportsClaim(edge Edge) bool {
+	return edge.To != "" && edge.Resolution != "candidate"
 }
 func (s *Store) documents() (map[string]Result, error) {
 	rows, e := s.Q.Query("SELECT id,payload FROM documents ORDER BY id")
@@ -607,6 +689,11 @@ func (s *Store) ImportPortable() []string {
 				var raw string
 				if s.Q.QueryRow("SELECT payload FROM edges WHERE id=?", rel).Scan(&raw) != nil {
 					c.Stale = true
+				} else {
+					var edge Edge
+					if json.Unmarshal([]byte(raw), &edge) != nil || !relationSupportsClaim(edge) {
+						valid = false
+					}
 				}
 				if c.Dependencies["scope:."] == "" {
 					valid = false

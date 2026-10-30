@@ -12,12 +12,16 @@ import (
 const help = `omp — local repository evidence for your agent
 
   omp update [--verify] [--json]
-  omp status [--json]
+  omp status [--verbose] [--json]
+  omp investigate "question" [--limit 3] [--json]
   omp search "query" [--limit 10] [--json]
-  omp evidence <id> [--direction both|incoming|outgoing] [--kinds calls,references,imports,next]
+  omp navigate "query" [--limit 10] [--direction both|incoming|outgoing]
+      [--kinds calls,references,imports,next,http_candidate,message_candidate] [--depth 1] [--nodes 20] [--bytes 65536] [--json]
+  omp evidence <id> [--direction both|incoming|outgoing] [--kinds calls,references,imports,next,http_candidate,message_candidate]
       [--depth 1] [--nodes 20] [--bytes 65536] [--cursor <cursor>] [--json]
   omp knowledge pending [--limit 20] [--cursor <cursor>] [--json]
   omp knowledge apply <result.json> [--dry-run] [--json]
+  omp knowledge add --text "finding" --evidence <id[,id]> [--kind source_fact|inference] [--confidence low|medium|high] [--assumption "text"] [--dry-run] [--json]
 
 Run from any directory in a Git working tree. No model, API, server or background process.
 `
@@ -38,7 +42,7 @@ func main() {
 			return
 		}
 		if strings.HasPrefix(a, "--") {
-			if a == "--verify" || a == "--dry-run" {
+			if a == "--verify" || a == "--dry-run" || a == "--verbose" {
 				flags[a] = "true"
 			} else {
 				if i+1 >= len(args) {
@@ -87,7 +91,7 @@ func run(p []string, f map[string]string) (engine.Envelope, error) {
 	if cmd == "knowledge" && len(p) > 1 {
 		cmd += " " + p[1]
 	}
-	allowed := map[string]string{"update": "--verify", "status": "", "search": "--limit", "evidence": "--direction --kinds --depth --nodes --bytes --cursor", "knowledge pending": "--limit --cursor", "knowledge apply": "--dry-run"}
+	allowed := map[string]string{"update": "--verify", "status": "--verbose", "search": "--limit", "investigate": "--limit", "navigate": "--limit --direction --kinds --depth --nodes --bytes", "evidence": "--direction --kinds --depth --nodes --bytes --cursor", "knowledge pending": "--limit --cursor", "knowledge apply": "--dry-run", "knowledge add": "--text --evidence --kind --assumption --confidence --dry-run"}
 	opts, ok := allowed[cmd]
 	if !ok {
 		return empty, fmt.Errorf("invalid_command")
@@ -99,7 +103,7 @@ func run(p []string, f map[string]string) (engine.Envelope, error) {
 	}
 	want := 1
 	switch cmd {
-	case "search", "evidence", "knowledge pending":
+	case "search", "investigate", "navigate", "evidence", "knowledge pending", "knowledge add":
 		want = 2
 	case "knowledge apply":
 		want = 3
@@ -117,7 +121,11 @@ func run(p []string, f map[string]string) (engine.Envelope, error) {
 		}
 		return n, nil
 	}
-	limit, e := num("--limit", 10, 100)
+	defaultLimit := 10
+	if cmd == "investigate" {
+		defaultLimit = 3
+	}
+	limit, e := num("--limit", defaultLimit, 100)
 	if e != nil {
 		return empty, e
 	}
@@ -131,7 +139,7 @@ func run(p []string, f map[string]string) (engine.Envelope, error) {
 	}
 	defer s.DB.Close()
 	if cmd == "update" { // Config may have been initialized by Open.
-		w, e = engine.Discover()
+		w, e = engine.DiscoverVerified(f["--verify"] != "")
 		if e != nil {
 			return empty, e
 		}
@@ -142,7 +150,7 @@ func run(p []string, f map[string]string) (engine.Envelope, error) {
 		}
 		return r, e
 	}
-	if cmd != "knowledge apply" {
+	if cmd != "knowledge apply" && cmd != "knowledge add" {
 		tx, err := s.DB.Begin()
 		if err != nil {
 			return empty, err
@@ -158,10 +166,12 @@ func run(p []string, f map[string]string) (engine.Envelope, error) {
 	}
 	switch cmd {
 	case "status":
-		return s.Status()
+		return s.Status(f["--verbose"] != "")
 	case "search":
 		return s.Search(p[1], limit)
-	case "evidence":
+	case "investigate":
+		return s.Investigate(p[1], limit)
+	case "evidence", "navigate":
 		depth, e := num("--depth", 1, 8)
 		if e != nil {
 			return empty, e
@@ -181,6 +191,9 @@ func run(p []string, f map[string]string) (engine.Envelope, error) {
 		if dir != "both" && dir != "incoming" && dir != "outgoing" {
 			return empty, fmt.Errorf("invalid_direction")
 		}
+		if cmd == "navigate" {
+			return s.Navigate(p[1], limit, dir, f["--kinds"], depth, nodes, bytes)
+		}
 		return s.Evidence(p[1], dir, f["--kinds"], depth, nodes, bytes, f["--cursor"])
 	case "knowledge pending":
 		return s.Pending(limit, f["--cursor"])
@@ -190,6 +203,19 @@ func run(p []string, f map[string]string) (engine.Envelope, error) {
 			return empty, e
 		}
 		return s.Apply(r, f["--dry-run"] != "")
+	case "knowledge add":
+		kind := f["--kind"]
+		if kind == "" {
+			kind = "source_fact"
+		}
+		var evidence, assumptions []string
+		if f["--evidence"] != "" {
+			evidence = strings.Split(f["--evidence"], ",")
+		}
+		if f["--assumption"] != "" {
+			assumptions = []string{f["--assumption"]}
+		}
+		return s.AddNote(f["--text"], kind, evidence, assumptions, f["--dry-run"] != "", f["--confidence"])
 	}
 	return empty, fmt.Errorf("invalid_command")
 }
