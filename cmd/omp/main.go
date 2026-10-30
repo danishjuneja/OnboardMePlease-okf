@@ -13,12 +13,12 @@ const help = `omp — local repository evidence for your agent
 
   omp update [--verify] [--json]
   omp status [--verbose] [--json]
-  omp investigate "question" [--limit 3] [--json]
-  omp search "query" [--limit 10] [--json]
+  omp investigate "question" [--limit 3] [--fast] [--json]
+  omp search "query" [--limit 10] [--fast] [--json]
   omp navigate "query" [--limit 10] [--direction both|incoming|outgoing]
-      [--kinds calls,references,imports,next,http_candidate,message_candidate] [--depth 1] [--nodes 20] [--bytes 65536] [--json]
+      [--kinds calls,references,imports,next,http_candidate,message_candidate] [--depth 1] [--nodes 20] [--bytes 65536] [--fast] [--json]
   omp evidence <id> [--direction both|incoming|outgoing] [--kinds calls,references,imports,next,http_candidate,message_candidate]
-      [--depth 1] [--nodes 20] [--bytes 65536] [--cursor <cursor>] [--json]
+      [--depth 1] [--nodes 20] [--bytes 65536] [--cursor <cursor>] [--fast] [--json]
   omp knowledge pending [--limit 20] [--cursor <cursor>] [--json]
   omp knowledge apply <result.json> [--dry-run] [--json]
   omp knowledge add --text "finding" --evidence <id[,id]> [--kind source_fact|inference] [--confidence low|medium|high] [--assumption "text"] [--dry-run] [--json]
@@ -42,7 +42,7 @@ func main() {
 			return
 		}
 		if strings.HasPrefix(a, "--") {
-			if a == "--verify" || a == "--dry-run" || a == "--verbose" {
+			if a == "--verify" || a == "--dry-run" || a == "--verbose" || a == "--fast" {
 				flags[a] = "true"
 			} else {
 				if i+1 >= len(args) {
@@ -91,7 +91,7 @@ func run(p []string, f map[string]string) (engine.Envelope, error) {
 	if cmd == "knowledge" && len(p) > 1 {
 		cmd += " " + p[1]
 	}
-	allowed := map[string]string{"update": "--verify", "status": "--verbose", "search": "--limit", "investigate": "--limit", "navigate": "--limit --direction --kinds --depth --nodes --bytes", "evidence": "--direction --kinds --depth --nodes --bytes --cursor", "knowledge pending": "--limit --cursor", "knowledge apply": "--dry-run", "knowledge add": "--text --evidence --kind --assumption --confidence --dry-run"}
+	allowed := map[string]string{"update": "--verify", "status": "--verbose", "search": "--limit --fast", "investigate": "--limit --fast", "navigate": "--limit --direction --kinds --depth --nodes --bytes --fast", "evidence": "--direction --kinds --depth --nodes --bytes --cursor --fast", "knowledge pending": "--limit --cursor", "knowledge apply": "--dry-run", "knowledge add": "--text --evidence --kind --assumption --confidence --dry-run"}
 	opts, ok := allowed[cmd]
 	if !ok {
 		return empty, fmt.Errorf("invalid_command")
@@ -138,6 +138,7 @@ func run(p []string, f map[string]string) (engine.Envelope, error) {
 		return empty, e
 	}
 	defer s.DB.Close()
+	s.Fast = f["--fast"] != ""
 	if cmd == "update" { // Config may have been initialized by Open.
 		w, e = engine.DiscoverVerified(f["--verify"] != "")
 		if e != nil {

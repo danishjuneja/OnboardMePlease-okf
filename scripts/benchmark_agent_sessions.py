@@ -46,7 +46,7 @@ def source_fingerprint(root):
     return {"sha256": digest.hexdigest(), "tracked_files": len(paths)}
 
 
-def prompt(mode, binary):
+def prompt(mode, binary, question=QUESTION, omp_fast=False):
     if mode == "control":
         instructions = ("Use ordinary repository search and file-reading commands. "
                         "Do not use omp or its index or knowledge files.\n\n")
@@ -58,7 +58,10 @@ def prompt(mode, binary):
                         "Lexical results and candidate links are leads, not proof. "
                         "Do not run update or create knowledge. You may use normal source "
                         "search and reads when needed.\n\n")
-    return COMMON + instructions + "Question: " + QUESTION
+        if omp_fast:
+            instructions += ("Use --fast with investigate, search, navigate, and evidence. "
+                             "Fast freshness is metadata-based; verify findings against source.\n\n")
+    return COMMON + instructions + "Question: " + question
 
 
 def parse_events(text, binary_name):
@@ -86,8 +89,8 @@ def parse_events(text, binary_name):
             "event_errors": event_errors, "answer": messages[-1] if messages else ""}
 
 
-def run_one(mode, root, codex, binary, outdir, sample, timeout):
-    task = prompt(mode, binary)
+def run_one(mode, root, codex, binary, outdir, sample, timeout, question, omp_fast):
+    task = prompt(mode, binary, question, omp_fast)
     (outdir / f"{sample}-{mode}-prompt.txt").write_text(task + "\n", encoding="utf-8")
     command = [codex, "exec", "--ephemeral", "--json", "--sandbox", "workspace-write",
                "--ignore-user-config"]
@@ -112,6 +115,7 @@ def run_one(mode, root, codex, binary, outdir, sample, timeout):
     (outdir / f"{sample}-{mode}-answer.md").write_text(answer + "\n", encoding="utf-8")
     parsed.update({"mode": mode, "wall_seconds": elapsed, "exit_code": code, "timed_out": timed_out})
     parsed["policy_blocked"] = "blocked by policy" in stderr.lower()
+    parsed["fast_command_count"] = sum(1 for c in parsed["commands"] if Path(binary).name.lower() in c["command"].lower() and "--fast" in c["command"])
     parsed["compliant"] = code == 0 and bool(parsed["usage"]) and bool(answer.strip()) and parsed["command_count"] > 0 and not parsed["policy_blocked"] and not parsed["event_errors"] and (
         parsed["omp_command_count"] == 0 if mode == "control" else parsed["omp_command_count"] > 0)
     return parsed
@@ -126,13 +130,20 @@ def main():
     ap.add_argument("--output", type=Path, required=True)
     ap.add_argument("--pairs", type=int, default=1)
     ap.add_argument("--timeout", type=int, default=300)
+    ap.add_argument("--question", default=QUESTION, help="natural-language question for both arms")
+    ap.add_argument("--first", choices=("control", "assisted"), default="control", help="first arm in pair 1; subsequent pairs reverse order")
+    ap.add_argument("--omp-fast", action="store_true", help="ask assisted agent to use metadata freshness mode")
     args = ap.parse_args()
     if not 1 <= args.pairs <= 10 or not 30 <= args.timeout <= 900:
         ap.error("pairs must be 1..10 and timeout 30..900 seconds")
+    if not args.question.strip():
+        ap.error("question cannot be empty")
     control, assisted, output = args.control.resolve(), args.assisted.resolve(), args.output.resolve()
     binary, codex = str(args.omp.resolve()), str(args.codex.resolve())
     if output.is_relative_to(control) or output.is_relative_to(assisted):
         ap.error("output must be outside both source copies")
+    if output.exists() and any(output.iterdir()):
+        ap.error("output directory must be empty to preserve previous results")
     output.mkdir(parents=True, exist_ok=True)
     before = {"control": source_fingerprint(control), "assisted": source_fingerprint(assisted)}
     if before["control"] != before["assisted"]:
@@ -142,13 +153,16 @@ def main():
         raise SystemExit("assisted index is stale; prepare it before benchmarking")
     results = []
     for i in range(args.pairs):
-        for mode in (["control", "assisted"] if i % 2 == 0 else ["assisted", "control"]):
-            result = run_one(mode, control if mode == "control" else assisted, codex, binary, output, i + 1, args.timeout)
+        first = args.first if i % 2 == 0 else ("assisted" if args.first == "control" else "control")
+        for mode in [first, "assisted" if first == "control" else "control"]:
+            result = run_one(mode, control if mode == "control" else assisted, codex, binary, output, i + 1, args.timeout, args.question, args.omp_fast)
             results.append(result)
             print(f"pair {i+1} {mode}: {result['wall_seconds']:.2f}s, exit={result['exit_code']}, compliant={result['compliant']}, commands={result['command_count']}, omp={result['omp_command_count']}", flush=True)
     after = {"control": source_fingerprint(control), "assisted": source_fingerprint(assisted)}
     report = {"scope": "paired question-only agent pilot; answers require blinded source review",
-              "question": QUESTION, "source_before": before, "source_after": after,
+              "question": args.question, "omp_fast_requested": args.omp_fast, "omp_sha256": hashlib.sha256(Path(binary).read_bytes()).hexdigest(),
+              "codex_version": subprocess.run([codex, "--version"], capture_output=True, text=True).stdout.strip(),
+              "source_before": before, "source_after": after,
               "sources_unchanged": before == after, "results": results}
     (output / "summary.json").write_text(json.dumps(report, indent=2) + "\n", encoding="utf-8")
     if before != after:

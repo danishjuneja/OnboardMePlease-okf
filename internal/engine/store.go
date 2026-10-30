@@ -10,9 +10,10 @@ import (
 )
 
 type Store struct {
-	DB *sql.DB
-	W  Workspace
-	Q  interface {
+	DB   *sql.DB
+	W    Workspace
+	Fast bool
+	Q    interface {
 		Query(string, ...any) (*sql.Rows, error)
 		QueryRow(string, ...any) *sql.Row
 	}
@@ -122,7 +123,13 @@ func (s *Store) Files() (map[string]File, error) {
 	return m, r.Err()
 }
 func (s *Store) Envelope(state string, data any) Envelope {
-	return Envelope{1, s.Meta("generation"), state, []string{}, []string{}, false, data}
+	verification := "full_hash"
+	warnings := []string{}
+	if s.Fast {
+		verification = "metadata"
+		warnings = append(warnings, "Metadata checks can miss changes that preserve size and modification time; use a full audit for stronger freshness.")
+	}
+	return Envelope{Schema: 1, Generation: s.Meta("generation"), State: state, Reasons: []string{}, Warnings: warnings, Verification: verification, Data: data}
 }
 func (s *Store) Lock() (func(), error) {
 	p := filepath.Join(s.W.Root, ".onboard", "cache", "writer.lock")

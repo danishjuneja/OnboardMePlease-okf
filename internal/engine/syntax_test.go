@@ -9,6 +9,49 @@ import (
 	"testing"
 )
 
+func TestSyntaxAdapterPreservesUnicodePaths(t *testing.T) {
+	python := os.Getenv("OMP_SYNTAX_PYTHON")
+	if python == "" {
+		t.Skip("optional tree-sitter environment not configured")
+	}
+	path := "src/\u03b1.ts"
+	result, err := analyzeSyntax(python, []syntaxInput{{Path: path, Source: []byte("export function hello() {}\n")}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if result[path].Syntax != "tree_sitter_typescript" {
+		t.Fatalf("unicode path not preserved: %#v", result)
+	}
+}
+
+func TestSyntaxAdapterReportsErrorClass(t *testing.T) {
+	python := os.Getenv("OMP_SYNTAX_PYTHON")
+	if python == "" {
+		t.Skip("optional tree-sitter environment not configured")
+	}
+	_, err := syntaxCommand(python, []byte("{"), false)
+	if err == nil || !strings.Contains(err.Error(), "JSONDecodeError") {
+		t.Fatalf("missing parser failure class: %v", err)
+	}
+}
+
+func TestSyntaxAdapterAcceptsEmptySources(t *testing.T) {
+	python := os.Getenv("OMP_SYNTAX_PYTHON")
+	if python == "" {
+		t.Skip("optional tree-sitter environment not configured")
+	}
+	inputs := []syntaxInput{{Path: "empty.ts", Source: []byte{}}, {Path: "nil.ts", Source: nil}}
+	result, err := analyzeSyntax(python, inputs)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, input := range inputs {
+		if result[input.Path].Syntax != "tree_sitter_typescript" {
+			t.Fatalf("empty file missing: %#v", result)
+		}
+	}
+}
+
 func TestSyntaxDeclarationsProduceSearchableChunks(t *testing.T) {
 	src := []byte("import x\n\ndef alpha():\n    return beta()\n\ndef beta():\n    return 1\n")
 	analysis := syntaxAnalysis{Syntax: "tree_sitter_python", Declarations: []syntaxDeclaration{{Line: 3, Name: "alpha"}, {Line: 6, Name: "beta"}}}

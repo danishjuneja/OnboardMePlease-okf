@@ -1,0 +1,14 @@
+{
+  "repository": "https://github.com/microsoft/vscode",
+  "commit": "3a25209de7a9acb9c13cb7f114ba76c955c7c67b",
+  "question": "How does a command selected from the Command Palette get found and executed, including extension-provided commands, activation, and error handling? Explain the flow with file paths and line numbers, and state unresolved gaps.",
+  "rubric": [
+    {"id": "picks", "expectation": "Describe how the workbench gathers editor and global command picks, including cancellation and the extension-registration wait.", "source": "src/vs/workbench/contrib/quickaccess/browser/commandsQuickAccess.ts", "line": 119},
+    {"id": "accept", "expectation": "Explain that accepting a pick records history and calls the command service; distinguish cancellation from errors shown to the user.", "source": "src/vs/platform/quickinput/browser/commandsQuickAccess.ts", "line": 303},
+    {"id": "activation", "expectation": "Explain the registered and unregistered command cases and when the command activation event is awaited or not awaited.", "source": "src/vs/workbench/services/commands/common/commandService.ts", "line": 52},
+    {"id": "dispatch", "expectation": "Describe registry lookup, invoking the registered handler, and not-found or handler errors.", "source": "src/vs/workbench/services/commands/common/commandService.ts", "line": 92},
+    {"id": "extension_bridge", "expectation": "Explain that extension command registration installs a main-thread proxy handler that invokes the extension-host contributed command.", "source": "src/vs/workbench/api/browser/mainThreadCommands.ts", "line": 57},
+    {"id": "extension_callback", "expectation": "Describe extension-host callback registration and execution, including argument validation or callback error behavior.", "source": "src/vs/workbench/api/common/extHostCommands.ts", "line": 148, "additional_line": 231}
+  ],
+  "scoring": "Review each answer against source. Award one point only for a correct, appropriately cited explanation; mark partial or absent otherwise. Record unsupported claims separately. This is a manually reviewed exploratory rubric, not a validated general benchmark."
+}

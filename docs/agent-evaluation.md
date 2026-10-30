@@ -36,6 +36,61 @@ The index was already built, so the times exclude setup. This is one question an
 
 `scripts/benchmark_agent_sessions.py` runs this question against separate prepared Git copies, checks their tracked source fingerprints, captures session traces, and records time, command counts, output size, and token usage. The assisted copy needs a current index; the control copy must not contain the OMP index. Run `python scripts/benchmark_agent_sessions.py --help` for paths and options. The harness does not grade answers: review citations, missing facts, and unsupported claims separately. On Windows it enables Codex's unelevated sandbox while ignoring user configuration. Traces can contain source and should be stored accordingly.
 
+### Exploratory flow study
+
+The current CLI was tested with fresh Codex CLI 0.162.1 sessions, the same question and source access in both arms, and a prebuilt index in the assisted arm. Sessions used the same runner settings, but the harness did not record the resolved model. The harness checks tracked-source fingerprints before and after each study, but does not check parity for untracked or ignored files. Tool-output bytes include all completed command output. Input token counts include cached input. These were exploratory questions: scoring was not blinded, and the review criteria were not frozen in advance.
+
+| Repository and question | Direct search | OMP-assisted | Tool output, direct / OMP |
+| --- | --- | --- | --- |
+| Go tools, 1,615 files: command-line checker through analyzer execution | 84.85 s; 80.26 s | 82.68 s; 83.17 s | 211,319 / 102,785 bytes; 206,114 / 106,771 bytes |
+| Kafka, 7,564 files: broker produce request through storage and acknowledgements | 105.50 s | 177.65 s | 169,435 / 186,131 bytes |
+
+Each Go arm ran twice, with arm order reversed; Kafka had one pair, with OMP first. The Go pairs were effectively tied at this sample size, while the OMP run emitted less command output. Both Go answers covered the ordinary checker path, the separate unitchecker path, dependency scheduling and failures. Both Kafka answers covered request dispatch, validation, local append, and acknowledgement handling; the OMP answer traced additional storage and response details. This was a manual review of main points, not a formal correctness score. The Kafka answer difference and single run prevent attributing the time gap to OMP alone.
+
+Both OMP sessions needed source-search fallback. The Go `investigate` results started with unrelated `refactor/rename/mvpkg.go` chunks; the Kafka results started with two unrelated tests and a `DeleteRecords` schema. A subsequent Kafka `search handleProduceRequest` ranked test chunks first, and the agent's evidence traversal followed one of them. Kafka's Scala and Java have text-only indexing here, so graph navigation cannot resolve their cross-file calls.
+
+Separate, single warm replays on the same Kafka index measured 12.80 s for the agent's `investigate` query, 10.88 s for `search handleProduceRequest`, and 10.40 s for the selected `evidence` request. These are standalone replay timings, not per-command timings captured in the agent trace. Each path currently performs a full source-inventory audit; the measurements do not isolate how much time that audit consumes. Index creation and the harness's source-copy verification are excluded from agent times. The Go and Kafka source snapshots contained 1,615 and 7,564 tracked files respectively, and the same OMP binary was used for both.
+
+The first improvements to evaluate are: better ranking for natural-language flow questions and implementation files; a way to reuse freshness verification safely across a short investigation; and clearer language-coverage signals so an agent switches to source search sooner when graph edges cannot resolve a flow. Re-run repeated pairs and score citations and correctness against a frozen rubric before claiming a benefit.
+
+### Ranking, graph expansion, and metadata-audit experiment
+
+The follow-up adds bounded pairwise lexical candidates, source-kind and phrase ranking, and a two-hop graph expansion with prioritized edges. A new opt-in `--fast` mode checks file metadata instead of hashing the entire inventory; returned source excerpts and note dependencies are still checked against content hashes. Full verification remains the default. Metadata mode can miss an uncited change with unchanged size and mtime, so it has a different correctness guarantee.
+
+On the same Kafka index, two warm standalone runs of the benchmarked build produced the following times for the agent's original investigation query, in order full, fast, fast, full:
+
+| Verification | Wall times | First source results |
+| --- | --- | --- |
+| Full hashes | 18.66 s; 18.13 s | `KafkaApis.scala:481`, `Sender.java:881`, `ReplicaManager.scala:641` |
+| Metadata (`--fast`) | 3.80 s; 3.80 s | Same three sources |
+
+These command timings include process startup and query execution, not index creation. Earlier source-level measurements on this machine put one full audit at 21.41 s, an earlier metadata implementation at 7.66 s, and the optimized metadata implementation at 3.66 and 5.73 s in two later runs. After the timed build, a regression fix made metadata mode detect deletion of an already-indexed excluded file; that fix was tested but these timings were not repeated. These small, non-randomized samples establish a local difference, not a platform-wide guarantee.
+
+With `--fast` requested for the assisted agent and normal source verification available to both arms, two Go pairs using a near-final build were **81.18 / 71.77 s** and **74.33 / 70.87 s** (direct / OMP). The assisted agent used two OMP calls per run, and all answers covered the major checker paths and failure handling. These runs preceded a final high-degree edge-prioritization fix and removal of redundant filesystem checks.
+
+Two Kafka pairs on subsequent builds show why more repetitions matter: a near-final build ran **66.33 / 99.04 s** (direct / OMP); the benchmarked build ran **111.23 / 95.94 s**. Each assisted run used two OMP calls with `--fast`. Both arms' answers covered the main request, validation, append and acknowledgement path, though their detail differed. Review was manual and not blinded. The benchmarked build returned the handler and replica-manager files among its first three sources, but its Kafka graph still contained source-order links rather than resolved Java/Scala calls. Indexing was excluded, the resolved model was not recorded, and these sparse timings cannot establish a general speedup.
+
+The fast mode still scans the eligible inventory's metadata on each query. There is no watcher, reliable change journal, automatic refresh, or incremental reverse-dependency graph rebuild yet. Update reuses unchanged chunks but recomputes the graph when the source generation changes. These remaining costs and limits must be addressed and measured before claiming the incremental design is complete.
+
+To reproduce the component timings against an already-indexed disposable repository, set `OMP_BENCH_REPO` to its path and run `go test ./internal/engine -run '^$' -bench '^BenchmarkRepository' -benchtime=1x`. Use the same `OMP_SYNTAX_PYTHON` setting used to create that index. For an agent comparison, add `--omp-fast` to the session harness; its trace and summary show whether the assisted commands used `--fast`.
+
+### VS Code TypeScript study
+
+Repository: [microsoft/vscode](https://github.com/microsoft/vscode), commit `3a25209de7a9acb9c13cb7f114ba76c955c7c67b`; 20,691 tracked files, including 15,064 `.ts` and 257 `.tsx` files. The question and the source-based rubric were frozen in [vscode-command-palette.json](../testdata/evals/vscode-command-palette.json) before the agent runs. Both arms received only the question, not the rubric or anchors. Two fresh-session pairs ran in opposite arm order using Codex CLI 0.162.1; the resolved model was not recorded.
+
+The first index attempt failed after 541.31 seconds on an empty TypeScript file. The retry failed after 105.37 seconds and identified the adapter's missing empty-source field. After that fix, a full index build with warm filesystem caches took 582.26 seconds. It contained 20,685 eligible inventory entries, of which 444 were excluded, and occupied 1,992,830,976 bytes (about 1.86 GiB). The 337,409 relationships comprised 239,059 source-order `next` edges, 98,342 syntax-only candidate calls, six unresolved calls, and two external imports. The TypeScript call candidates are not compiler-resolved edges. The candidate-generation limit was reached.
+
+| Pair | Direct search | OMP with `--fast` | Tool-output bytes: direct / OMP |
+| --- | ---: | ---: | ---: |
+| 1 | 90.04 s | 116.91 s | 96,916 / 143,268 |
+| 2 | 120.42 s | 121.02 s | 105,654 / 139,221 |
+
+All four sessions completed, and both tracked-source fingerprints remained unchanged. Manual, non-blind review gave each answer five fully met rubric items and one partial item: all described the pick sources and extension-registration wait, but omitted the early cancellation check when collecting picks. They covered the principal command service, activation, extension-host bridge, callback, and error paths. This small rubric is not a comprehensive correctness assessment. The OMP-assisted sessions used three OMP calls each and verified claims with ordinary source reads.
+
+In both OMP sessions the first `investigate` result ranked unrelated extension command managers; the agent then searched for a specific identifier and followed a source-order relationship. The subsequent evidence output reported truncated syntax candidates. Separate single warm replays of the three OMP commands took 14.73 s (`investigate`), 13.79 s (`search`), and 12.04 s (`evidence`); those are not timings collected within the agent sessions. `--fast` uses metadata freshness, which is weaker than full hashing. Initial indexing, benchmark copy checks, and model usage costs are excluded from the agent wall times. The index build and size, repeated metadata scans, ranking quality, and candidate-only TypeScript links are material limitations exposed by this study.
+
+For new questions, pass `--question "..."`; use `--pairs 2` to reverse arm order between pairs, or `--first assisted` to start with OMP. Each run needs a new empty output directory. The benchmark question is passed to both agents; expected answers and source anchors should stay outside their prompts.
+
 ## Larger, multi-step flow checks
 
 `scripts/benchmark_real_flows.py` evaluates a Go analysis-checker flow in `golang.org/x/tools` v0.50.0 and a Scala produce-request flow in Kafka commit `cf4905dc7c9c595c60af9c80f238152e1a4b2ea5`. Prepare isolated Git worktrees with those exact source versions and run `omp update --json` separately before the benchmark. Set `OMP_SYNTAX_PYTHON` consistently if the optional adapter was enabled during indexing.

@@ -118,6 +118,23 @@ func (b *boundedSyntaxOutput) Write(p []byte) (int, error) {
 	return b.Buffer.Write(p)
 }
 
+// Do not return arbitrary interpreter stderr: it may contain repository data.
+// Keep a bounded prefix only to identify a known exception class.
+type syntaxDiagnostics struct{ bytes.Buffer }
+
+func (b *syntaxDiagnostics) Write(p []byte) (int, error) {
+	n := len(p)
+	if remaining := 16<<10 - b.Len(); remaining > 0 {
+		if len(p) > remaining {
+			p = p[:remaining]
+		}
+		_, _ = b.Buffer.Write(p)
+	}
+	return n, nil
+}
+
+var syntaxErrorClass = regexp.MustCompile(`(?m)^(?:[A-Za-z_][A-Za-z0-9_]*\.)*(JSONDecodeError|UnicodeDecodeError|UnicodeEncodeError|BrokenPipeError|MemoryError|RecursionError|ModuleNotFoundError|ImportError|PermissionError|OSError|ValueError|TypeError|KeyError)(?::|$)`)
+
 // The interpreter is an explicit user-selected dependency. Isolated mode keeps
 // the target repository off Python's import path; source is always JSON data.
 func syntaxCommand(python string, input []byte, probe bool) ([]byte, error) {
@@ -131,7 +148,15 @@ func syntaxCommand(python string, input []byte, probe bool) ([]byte, error) {
 	cmd.Stdin = bytes.NewReader(input)
 	var output boundedSyntaxOutput
 	cmd.Stdout = &output
+	var diagnostics syntaxDiagnostics
+	cmd.Stderr = &diagnostics
 	if err := cmd.Run(); err != nil {
+		if ctx.Err() != nil {
+			return nil, fmt.Errorf("syntax_adapter_timeout: %w", ctx.Err())
+		}
+		if match := syntaxErrorClass.FindStringSubmatch(diagnostics.String()); len(match) > 1 {
+			return nil, fmt.Errorf("syntax_adapter_failed: %s: %w", match[1], err)
+		}
 		return nil, fmt.Errorf("syntax_adapter_failed: %w", err)
 	}
 	return output.Bytes(), nil
@@ -204,7 +229,7 @@ func analyzeSyntax(python string, inputs []syntaxInput) (map[string]syntaxAnalys
 		}
 		result, err := syntaxCommand(python, raw, false)
 		if err != nil {
-			return nil, err
+			return nil, fmt.Errorf("%w (batch begins at %q)", err, inputs[0].Path)
 		}
 		var parsed []syntaxInput
 		if err = json.Unmarshal(result, &parsed); err != nil || len(parsed) != n {

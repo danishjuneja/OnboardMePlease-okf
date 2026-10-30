@@ -88,13 +88,14 @@ type StoredClaim struct {
 	Configuration string            `json:"configuration"`
 }
 type Envelope struct {
-	Schema     int      `json:"schema_version"`
-	Generation string   `json:"generation"`
-	State      string   `json:"state"`
-	Reasons    []string `json:"reason_codes"`
-	Warnings   []string `json:"warnings"`
-	Truncated  bool     `json:"truncated"`
-	Data       any      `json:"data"`
+	Schema       int      `json:"schema_version"`
+	Generation   string   `json:"generation"`
+	State        string   `json:"state"`
+	Reasons      []string `json:"reason_codes"`
+	Warnings     []string `json:"warnings"`
+	Truncated    bool     `json:"truncated"`
+	Verification string   `json:"verification,omitempty"`
+	Data         any      `json:"data"`
 }
 
 func ID(parts ...string) string {

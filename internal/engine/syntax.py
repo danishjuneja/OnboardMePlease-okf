@@ -143,7 +143,9 @@ if __name__ == "__main__":
     if len(sys.argv) > 1 and sys.argv[1] == "--probe":
         print(json.dumps(probe(), sort_keys=True))
     else:
-        items = json.load(sys.stdin)
+        # The Go process sends UTF-8 JSON; Windows text-mode stdin may use a
+        # legacy code page even under Python isolated mode.
+        items = json.load(sys.stdin.buffer)
         for item in items:
-            item["analysis"] = analyze(item["path"], base64.b64decode(item.pop("source"), validate=True))
+            item["analysis"] = analyze(item["path"], base64.b64decode(item.pop("source", "") or "", validate=True))
         print(json.dumps(items))

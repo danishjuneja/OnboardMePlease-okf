@@ -11,9 +11,10 @@ import (
 
 // Investigation is a bounded set of leads, not an answer or a proof of a path.
 type Investigation struct {
-	Sources       []InvestigationSource `json:"sources"`
-	Notes         []InvestigationNote   `json:"notes"`
-	Relationships []Edge                `json:"relationships"`
+	Sources        []InvestigationSource `json:"sources"`
+	Notes          []InvestigationNote   `json:"notes"`
+	RelatedSources []InvestigationSource `json:"related_sources"`
+	Relationships  []Edge                `json:"relationships"`
 }
 type InvestigationSource struct {
 	ID               string `json:"id"`
@@ -62,7 +63,7 @@ func excerpt(text string, max int) (string, bool) {
 
 // Investigate accepts a question and ranks lexical leads; it does not infer intent.
 func (s *Store) Investigate(question string, limit int) (Envelope, error) {
-	out := Investigation{Sources: []InvestigationSource{}, Notes: []InvestigationNote{}, Relationships: []Edge{}}
+	out := Investigation{Sources: []InvestigationSource{}, Notes: []InvestigationNote{}, RelatedSources: []InvestigationSource{}, Relationships: []Edge{}}
 	r := s.Envelope("no_match", out)
 	terms := queryTerms(question)
 	if limit < 1 || limit > 10 || len(terms) > 32 {
@@ -82,8 +83,21 @@ func (s *Store) Investigate(question string, limit int) (Envelope, error) {
 		return r, nil
 	}
 	fts := make([]string, len(terms))
+	variants := map[string][]string{}
 	for i, term := range terms {
-		fts[i] = "\"" + term + "\""
+		variants[term] = []string{term}
+		if len(term) >= 6 && strings.HasSuffix(term, "er") {
+			stem := strings.TrimSuffix(term, "er")
+			if strings.HasSuffix(stem, "c") {
+				stem += "e"
+			}
+			variants[term] = append(variants[term], stem)
+		}
+		parts := make([]string, 0, len(variants[term]))
+		for _, v := range variants[term] {
+			parts = append(parts, "\""+v+"\"")
+		}
+		fts[i] = "(" + strings.Join(parts, " OR ") + ")"
 	}
 	rows, err := s.Q.Query("SELECT id,kind FROM search WHERE search MATCH ? ORDER BY bm25(search),id LIMIT 200", strings.Join(fts, " OR "))
 	if err != nil {
@@ -111,6 +125,31 @@ func (s *Store) Investigate(question string, limit int) (Envelope, error) {
 	seen := map[string]bool{}
 	for _, c := range candidates {
 		seen[c.id] = true
+	}
+	// Broad OR ranking can crowd out code matching two adjacent concepts.
+	// Add a small, bounded set of pairwise matches before reranking.
+	for i := 0; i+1 < len(fts) && i < 8; i += 2 {
+		matches, e := s.Q.Query("SELECT id,kind FROM search WHERE search MATCH ? ORDER BY bm25(search),id LIMIT 40", fts[i]+" AND "+fts[i+1])
+		if e != nil {
+			return r, e
+		}
+		for matches.Next() {
+			var c candidate
+			if e = matches.Scan(&c.id, &c.kind); e != nil {
+				break
+			}
+			if !seen[c.id] {
+				candidates = append(candidates, c)
+				seen[c.id] = true
+			}
+		}
+		if e == nil {
+			e = matches.Err()
+		}
+		matches.Close()
+		if e != nil {
+			return r, e
+		}
 	}
 	if len(words) > 32 {
 		words = words[:32]
@@ -198,20 +237,47 @@ func (s *Store) Investigate(question string, limit int) (Envelope, error) {
 		if e != nil {
 			return r, e
 		}
-		if !s.W.Current(chunk) {
-			r.State = "partial"
-			r.Reasons = append(r.Reasons, "stale_candidates_removed")
-			continue
-		}
 		tokens := " " + tokenize(chunk.Path+" "+chunk.Symbol+" "+chunk.Text) + " "
+		contentTokens := " " + tokenize(chunk.Symbol+" "+chunk.Text) + " "
 		score := 0
 		for _, term := range terms {
-			if strings.Contains(tokens, " "+term+" ") {
-				score++
+			for _, variant := range variants[term] {
+				if strings.Contains(tokens, " "+variant+" ") {
+					score++
+					break
+				}
 			}
-			if strings.Contains(" "+tokenize(chunk.Path)+" ", " "+term+" ") {
-				score += 4
+			for _, variant := range variants[term] {
+				if strings.Contains(" "+tokenize(chunk.Path)+" ", " "+variant+" ") {
+					score += 2
+					break
+				}
 			}
+		}
+		// Adjacent concepts in a declaration (including split camelCase) are
+		// stronger evidence than isolated generic terms in a file path.
+		for i := 0; i+1 < len(terms); i++ {
+			for _, left := range variants[terms[i]] {
+				for _, right := range variants[terms[i+1]] {
+					if strings.Contains(contentTokens, " "+left+" "+right+" ") {
+						score += 10
+					}
+				}
+			}
+		}
+		if chunk.Kind == "implementation" {
+			score += 6
+		}
+		lowerPath := strings.ToLower(chunk.Path)
+		testOrBenchmark := chunk.Kind == "test" || strings.Contains(lowerPath, "benchmark") || strings.Contains(lowerPath, "/test/") || strings.Contains(lowerPath, "/tests/")
+		if testOrBenchmark && !strings.Contains(questionTokens, " test ") && !strings.Contains(questionTokens, " tests ") && !strings.Contains(questionTokens, " benchmark ") {
+			score -= 8
+		}
+		if strings.HasPrefix(chunk.Path, ".github/") {
+			score -= 8
+		}
+		if (strings.HasSuffix(lowerPath, "/doc.go") || lowerPath == "doc.go") && !strings.Contains(questionTokens, " documentation ") && !strings.Contains(questionTokens, " docs ") {
+			score -= 25
 		}
 		for _, word := range words {
 			if unicode.IsUpper([]rune(word)[0]) && (strings.Contains(chunk.Text, "type "+word+" ") || strings.Contains(chunk.Text, "class "+word) || strings.Contains(chunk.Text, "interface "+word)) {
@@ -219,9 +285,8 @@ func (s *Store) Investigate(question string, limit int) (Envelope, error) {
 			}
 		}
 		if chunk.Symbol != "" && strings.Contains(questionTokens, " "+tokenize(chunk.Symbol)+" ") {
-			score += 20
 			for _, word := range words {
-				if word == chunk.Symbol && unicode.IsUpper([]rune(word)[0]) {
+				if word == chunk.Symbol {
 					score += 30
 					break
 				}
@@ -236,6 +301,11 @@ func (s *Store) Investigate(question string, limit int) (Envelope, error) {
 			break
 		}
 		c := item.chunk
+		if !s.W.Current(c) {
+			r.State = "partial"
+			r.Reasons = append(r.Reasons, "stale_candidates_removed")
+			continue
+		}
 		text, truncated := excerpt(c.Text, 1200)
 		out.Sources = append(out.Sources, InvestigationSource{c.ID, c.Path, c.Symbol, c.Start, c.End, text, truncated})
 		if truncated {
@@ -243,32 +313,18 @@ func (s *Store) Investigate(question string, limit int) (Envelope, error) {
 		}
 	}
 	if len(out.Sources) > 0 {
-		rows, err = s.Q.Query("SELECT payload FROM edges WHERE src=? OR dst=? ORDER BY id LIMIT 9", out.Sources[0].ID, out.Sources[0].ID)
+		var limited, stale bool
+		out.RelatedSources, out.Relationships, limited, stale, err = s.investigationGraph(out.Sources[0].ID, terms)
 		if err != nil {
 			return r, err
 		}
-		for rows.Next() {
-			if len(out.Relationships) == 8 {
-				r.Truncated = true
-				r.Reasons = append(r.Reasons, "relationship_budget_reached")
-				break
-			}
-			var raw string
-			var edge Edge
-			if err = rows.Scan(&raw); err != nil {
-				break
-			}
-			if err = json.Unmarshal([]byte(raw), &edge); err != nil {
-				break
-			}
-			out.Relationships = append(out.Relationships, edge)
+		if limited {
+			r.Truncated = true
+			r.Reasons = append(r.Reasons, "relationship_budget_reached")
 		}
-		if err == nil {
-			err = rows.Err()
-		}
-		rows.Close()
-		if err != nil {
-			return r, err
+		if stale {
+			r.State = "partial"
+			r.Reasons = append(r.Reasons, "stale_candidates_removed")
 		}
 	}
 	r.Data = out
@@ -290,4 +346,118 @@ func (s *Store) Investigate(question string, limit int) (Envelope, error) {
 	}
 	r.Warnings = append(r.Warnings, "Lexical leads and relationships require source verification; candidate relationships are not proof.")
 	return r, nil
+}
+
+// investigationGraph expands at most two hops, prioritizing supported calls.
+// Every returned neighboring source is rechecked against its content hash.
+func (s *Store) investigationGraph(seed string, terms []string) ([]InvestigationSource, []Edge, bool, bool, error) {
+	type visit struct {
+		id    string
+		depth int
+	}
+	queue := []visit{{seed, 0}}
+	seen := map[string]bool{seed: true}
+	edgeSeen := map[string]bool{}
+	related := []InvestigationSource{}
+	edges := []Edge{}
+	limited, stale := false, false
+	for len(queue) > 0 {
+		v := queue[0]
+		queue = queue[1:]
+		if v.depth >= 2 {
+			limited = true
+			continue
+		}
+		rows, err := s.Q.Query(`SELECT payload FROM edges WHERE src=? OR dst=?
+			ORDER BY ((CASE WHEN src=? THEN 4 ELSE 0 END) +
+			(CASE kind WHEN 'calls' THEN 8 WHEN 'references' THEN 5 WHEN 'imports' THEN 3 WHEN 'next' THEN 1 ELSE 0 END) +
+			(CASE WHEN dst<>'' AND json_extract(payload,'$.resolution')<>'candidate' THEN 4 ELSE 0 END)) DESC, id LIMIT 65`, v.id, v.id, v.id)
+		if err != nil {
+			return nil, nil, false, false, err
+		}
+		var adjacent []Edge
+		for rows.Next() {
+			var raw string
+			var edge Edge
+			if err = rows.Scan(&raw); err != nil {
+				break
+			}
+			if err = json.Unmarshal([]byte(raw), &edge); err != nil {
+				break
+			}
+			adjacent = append(adjacent, edge)
+		}
+		if err == nil {
+			err = rows.Err()
+		}
+		rows.Close()
+		if err != nil {
+			return nil, nil, false, false, err
+		}
+		if len(adjacent) > 64 {
+			limited = true
+			adjacent = adjacent[:64]
+		}
+		score := func(e Edge) int {
+			n := 0
+			if e.From == v.id {
+				n += 4
+			}
+			switch e.Kind {
+			case "calls":
+				n += 8
+			case "references":
+				n += 5
+			case "imports":
+				n += 3
+			case "next":
+				n++
+			}
+			if e.To != "" && e.Resolution != "candidate" {
+				n += 4
+			}
+			tokens := " " + tokenize(e.Target+" "+e.Path) + " "
+			for _, term := range terms {
+				if strings.Contains(tokens, " "+term+" ") {
+					n++
+				}
+			}
+			return n
+		}
+		sort.SliceStable(adjacent, func(i, j int) bool { return score(adjacent[i]) > score(adjacent[j]) })
+		for _, edge := range adjacent {
+			if edgeSeen[edge.ID] {
+				continue
+			}
+			if len(edges) >= 8 {
+				limited = true
+				break
+			}
+			next := edge.To
+			if next == v.id {
+				next = edge.From
+			}
+			if next != "" && !seen[next] {
+				if len(related) >= 3 {
+					limited = true
+					continue
+				}
+				chunk, er := s.Chunk(next)
+				if er != nil || !s.W.Current(chunk) {
+					stale = true
+					continue
+				}
+				text, cut := excerpt(chunk.Text, 700)
+				if cut {
+					limited = true
+				}
+				related = append(related, InvestigationSource{chunk.ID, chunk.Path, chunk.Symbol, chunk.Start, chunk.End, text, cut})
+				seen[next] = true
+				queue = append(queue, visit{next, v.depth + 1})
+			}
+			edgeSeen[edge.ID] = true
+			edges = append(edges, edge)
+		}
+	}
+	return related, edges, limited, stale, nil
 }

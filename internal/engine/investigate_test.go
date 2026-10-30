@@ -1,6 +1,7 @@
 package engine
 
 import (
+	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -40,6 +41,91 @@ func TestInvestigationFindsTypeDeclarationFromQuestion(t *testing.T) {
 	sources := r.Data.(Investigation).Sources
 	if len(sources) == 0 || !strings.Contains(sources[0].Excerpt, "type Action struct") {
 		t.Fatalf("missing Action declaration: %#v", sources)
+	}
+}
+
+func TestInvestigationFollowsSupportedCall(t *testing.T) {
+	s, _ := investigationStore(t)
+	r, err := s.Investigate("ExecuteAction", 3)
+	if err != nil {
+		t.Fatal(err)
+	}
+	data := r.Data.(Investigation)
+	found := false
+	for _, source := range data.RelatedSources {
+		if source.Symbol == "doWork" {
+			found = true
+		}
+	}
+	if !found {
+		t.Fatalf("call target was not returned: %#v", data)
+	}
+}
+
+func TestInvestigationPrioritizesCallsAtHighDegreeNodes(t *testing.T) {
+	s, _ := investigationStore(t)
+	find := func(q string) string {
+		r, err := s.Search(q, 10)
+		if err != nil {
+			t.Fatal(err)
+		}
+		for _, h := range r.Data.([]Hit) {
+			if h.Source != nil && h.Source.Symbol == q {
+				return h.ID
+			}
+		}
+		t.Fatalf("missing %s", q)
+		return ""
+	}
+	seed, target := find("ExecuteAction"), find("doWork")
+	if _, err := s.DB.Exec("DELETE FROM edges WHERE src=? OR dst=?", seed, seed); err != nil {
+		t.Fatal(err)
+	}
+	insert := func(e Edge) {
+		if _, err := s.DB.Exec("INSERT INTO edges VALUES (?,?,?,?,?)", e.ID, e.From, e.To, e.Kind, encode(e)); err != nil {
+			t.Fatal(err)
+		}
+	}
+	for i := 0; i < 70; i++ {
+		insert(Edge{ID: fmt.Sprintf("%03d", i), From: seed, To: target, Kind: "next", Resolution: "source_order"})
+	}
+	insert(Edge{ID: "zzz-call", From: seed, To: target, Kind: "calls", Resolution: "compiler_resolved"})
+	r, err := s.Investigate("ExecuteAction", 3)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, e := range r.Data.(Investigation).Relationships {
+		if e.ID == "zzz-call" {
+			return
+		}
+	}
+	t.Fatal("supported call was hidden by lower-priority edges")
+}
+
+func TestInvestigationRanksImplementationForNaturalLanguageFlow(t *testing.T) {
+	s, root := investigationStore(t)
+	for p, body := range map[string]string{
+		"broker/produce.scala":       "class Broker { def handleProduceRequest(): Unit = { appendRecords() } }\n",
+		"src/test/broker_test.scala": "// producer request broker request producer request\nclass BrokerTest {}\n",
+	} {
+		name := filepath.Join(root, filepath.FromSlash(p))
+		if err := os.MkdirAll(filepath.Dir(name), 0755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(name, []byte(body), 0600); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if _, err := s.Update(false); err != nil {
+		t.Fatal(err)
+	}
+	r, err := s.Investigate("How does the broker handle a producer request?", 3)
+	if err != nil {
+		t.Fatal(err)
+	}
+	sources := r.Data.(Investigation).Sources
+	if len(sources) == 0 || sources[0].Path != "broker/produce.scala" {
+		t.Fatalf("implementation not ranked first: %#v", sources)
 	}
 }
 

@@ -130,21 +130,28 @@ func (w Workspace) excluded(p string) bool {
 // Reject symlinks in every path component, including directory junctions exposed
 // as symlinks by Go. Never follow repository links outside the inventory.
 func (w Workspace) safe(p string) (string, error) {
+	name, _, err := w.safeInfo(p)
+	return name, err
+}
+
+func (w Workspace) safeInfo(p string) (string, os.FileInfo, error) {
 	if p == "" || path.IsAbs(p) || strings.Contains(p, "\\") || p == ".." || strings.HasPrefix(p, "../") || path.Clean(p) != p {
-		return "", fmt.Errorf("unsafe_path")
+		return "", nil, fmt.Errorf("unsafe_path")
 	}
 	cur := w.Root
+	var info os.FileInfo
 	for _, part := range strings.Split(p, "/") {
 		cur = filepath.Join(cur, part)
 		s, e := os.Lstat(cur)
 		if e != nil {
-			return "", e
+			return "", nil, e
 		}
 		if s.Mode()&os.ModeSymlink != 0 {
-			return "", fmt.Errorf("symlink")
+			return "", nil, fmt.Errorf("symlink")
 		}
+		info = s
 	}
-	return cur, nil
+	return cur, info, nil
 }
 
 var secrets = []*regexp.Regexp{regexp.MustCompile(`-----BEGIN (?:RSA |EC |OPENSSH )?PRIVATE KEY-----`), regexp.MustCompile(`(?:ghp_|github_pat_)[A-Za-z0-9_]{16,}`), regexp.MustCompile(`(?i)(?:api[_-]?key|password|secret)\s*[:=]\s*["'][^\s"']{12,}["']`)}

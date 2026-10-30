@@ -29,7 +29,7 @@ OMP does not run a model or answer questions itself. A coding agent interprets t
 
 ## Does it help?
 
-The goal is to get an agent to a correct, cited answer with less searching and less repeated context. In one preliminary paired run on a 1,615-file Go repository, the direct-search agent took 64.7 seconds and the OMP-assisted agent took 60.5 seconds; both produced detailed explanations. Index creation was excluded. One question is not enough to establish a general speedup, so we keep the [benchmark method and its limitations](docs/agent-evaluation.md) visible.
+The goal is to get an agent to a correct, cited answer with less searching and less repeated context. Exploratory comparisons on Go and Kafka produced detailed answers with both approaches, with mixed timing results. The samples exclude index creation and are not enough to establish a general speedup. See the [results, benchmark method, and limitations](docs/agent-evaluation.md).
 
 ## More information
 
