@@ -10,10 +10,12 @@ import (
 )
 
 type Store struct {
-	DB   *sql.DB
-	W    Workspace
-	Fast bool
-	Q    interface {
+	DB                *sql.DB
+	W                 Workspace
+	Fast              bool
+	sessionActive     bool
+	sessionGeneration string
+	Q                 interface {
 		Query(string, ...any) (*sql.Rows, error)
 		QueryRow(string, ...any) *sql.Row
 	}

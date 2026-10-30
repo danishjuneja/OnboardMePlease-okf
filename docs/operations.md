@@ -30,6 +30,22 @@ omp knowledge add --text "A source-backed finding" --evidence <chunk-id> --json
 
 Retrieval defaults to a full inventory hash audit. `investigate`, `search`, `navigate`, and `evidence` accept `--fast` for an opt-in metadata audit; their JSON envelope reports `verification: metadata` and includes a warning. It checks inventory, size, modification time, mode and configuration, and still content-checks returned sources and note dependencies. A change that preserves metadata elsewhere can be missed, including one that affects graph resolution or negative claims. Use the default full audit where that matters. `--fast` checks every path's metadata; it is not a watcher, and it does not update a stale index automatically.
 
+### Reuse verification in a session
+
+Run `omp session` for a foreground JSON Lines process, or `omp session --fast` to use the weaker metadata audit at startup. It writes one ready envelope, then reads one JSON request per line and writes one envelope per request:
+
+```jsonl
+{"command":"investigate","query":"How does the command palette execute a command?"}
+{"command":"search","query":"CommandsQuickAccessProvider"}
+{"command":"evidence","id":"<source-id>"}
+{"command":"refresh"}
+{"command":"close"}
+```
+
+Requests are sequential. `navigate` and `evidence` accept `direction`, `kinds`, `depth`, `nodes`, and `bytes`; `evidence` also accepts `cursor`. Search and investigation accept `limit`. Each request uses its own database read transaction. A changed index generation invalidates the session; a failed refresh prevents further queries until refresh succeeds. `refresh` rechecks the whole inventory using the session's original verification mode and reloads configuration.
+
+There is no filesystem watcher. Between refreshes, OMP cannot establish whether unrelated files or graph dependencies changed. Every session result is explicitly marked `verification: session_snapshot` and `partial`, with a warning; returned source and note evidence is content-checked. Revalidate before relying on repository-wide conclusions or absence claims. Session mode does not authorize creating knowledge or running repository code.
+
 `knowledge add` stores one focused agent-assessed note using evidence IDs returned by the index. It validates current evidence and exports the same portable JSON/Markdown as structured knowledge. `--kind inference --assumption "..."` records an inference and its assumption; `--confidence low|medium|high` optionally records the author's judgment, not a measured probability. `--dry-run` validates without saving. Notes are not proof, do not mark a unit fully reviewed, and are filtered when their source hashes or configuration change. For negative claims, relationship evidence, conditions, conflicts, or scoped dependencies, use the structured `knowledge apply` contract.
 
 ## Optional Python and TypeScript syntax

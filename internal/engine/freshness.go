@@ -1,6 +1,7 @@
 package engine
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -10,6 +11,9 @@ import (
 // finding without touching an existing citation. This intentionally favors
 // correctness over metadata-only latency in the initial CLI.
 func (s *Store) Audit() (bool, error) {
+	if s.sessionActive {
+		return s.sessionGeneration != "" && s.Meta("generation") == s.sessionGeneration && s.Meta("config") == s.W.ConfigHash, nil
+	}
 	if s.Fast {
 		return s.auditMetadata()
 	}
@@ -41,6 +45,46 @@ func (s *Store) Audit() (bool, error) {
 		}
 	}
 	return true, nil
+}
+
+// BeginSession verifies once; subsequent reads use the captured generation.
+// Without a change journal it cannot guarantee that the worktree stays current.
+func (s *Store) BeginSession() error {
+	s.sessionActive = true
+	return s.RefreshSession()
+}
+
+func (s *Store) InvalidateSession() { s.sessionGeneration = "" }
+
+func (s *Store) RefreshSession() error {
+	s.sessionActive = false
+	s.sessionGeneration = ""
+	fresh, err := s.Audit()
+	s.sessionActive = true
+	if err != nil {
+		return err
+	}
+	if !fresh {
+		return fmt.Errorf("stale_session: run omp update")
+	}
+	s.sessionGeneration = s.Meta("generation")
+	if s.sessionGeneration == "" {
+		return fmt.Errorf("unavailable: run omp update")
+	}
+	return nil
+}
+
+func (s *Store) SessionResult(r Envelope) Envelope {
+	if !s.sessionActive {
+		return r
+	}
+	r.Verification = "session_snapshot"
+	r.Warnings = append(r.Warnings, "The inventory was checked at session refresh, not for this request; changes may be missed. Refresh before relying on repository-wide results.")
+	r.Reasons = append(r.Reasons, "session_freshness_not_revalidated")
+	if r.State == "matched" || r.State == "no_match" || r.State == "current" {
+		r.State = "partial"
+	}
+	return r
 }
 
 // Metadata checks are explicitly weaker than content hashes. Return sources

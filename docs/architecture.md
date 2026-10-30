@@ -26,6 +26,8 @@ FTS tokenization splits camelCase, snake_case and qualified identifiers. Search 
 
 Retrieval offers an opt-in metadata audit (`--fast`); full content auditing remains the default. Metadata auditing enumerates eligible paths and compares size, mtime, mode and configuration. It can miss changes with preserved metadata and is labeled accordingly. It is not change tracking or incremental graph rebuilding: `update` still reuses unchanged chunks but recomputes the graph when the generation changes.
 
+`session` holds the process and SQLite connection open, audits once at startup, and uses a fresh read transaction per query. It rejects a changed index generation and content-checks returned source and knowledge dependencies. Because it does not track filesystem events, every result is marked `session_snapshot` and partial; `refresh` re-audits. No process or service remains after the client closes stdin or sends `close`.
+
 Traversal has direction, relationship-kind, depth, node and byte limits, cycle protection, and generation-bound cursors. Short cursor tokens refer to ignored local files; at most 128 recent cursor states are retained. Expired cursors require a new traversal. Evidence establishes a static relationship, not deployment or successful execution. High-degree branches and budget limits must remain visible rather than implying no further path exists.
 
 ## Knowledge

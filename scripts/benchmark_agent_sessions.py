@@ -46,7 +46,7 @@ def source_fingerprint(root):
     return {"sha256": digest.hexdigest(), "tracked_files": len(paths)}
 
 
-def prompt(mode, binary, question=QUESTION, omp_fast=False):
+def prompt(mode, binary, question=QUESTION, omp_fast=False, omp_session=False):
     if mode == "control":
         instructions = ("Use ordinary repository search and file-reading commands. "
                         "Do not use omp or its index or knowledge files.\n\n")
@@ -61,6 +61,17 @@ def prompt(mode, binary, question=QUESTION, omp_fast=False):
         if omp_fast:
             instructions += ("Use --fast with investigate, search, navigate, and evidence. "
                              "Fast freshness is metadata-based; verify findings against source.\n\n")
+        if omp_session:
+            instructions = (f"The repository already has a current omp index. The omp executable is {binary}. "
+                            f"Use one interactive `omp session{' --fast' if omp_fast else ''}` process for OMP queries. "
+                            "It emits one ready JSON line, then accepts one JSON request per line and emits one response per line. "
+                            "Use an interactive shell session and its stdin-writing tool to exchange messages. "
+                            'Start with {"command":"investigate","query":"<question>"}; '
+                            'follow up with {"command":"search","query":"..."} or {"command":"evidence","id":"..."}. '
+                            'Finish with {"command":"close"}. '
+                            "Session responses use a snapshot and may miss later changes; verify findings against source. "
+                            "Candidate links are leads, not proof. Do not run update or create knowledge. "
+                            "You may use ordinary source search and reads.\n\n")
     return COMMON + instructions + "Question: " + question
 
 
@@ -89,8 +100,8 @@ def parse_events(text, binary_name):
             "event_errors": event_errors, "answer": messages[-1] if messages else ""}
 
 
-def run_one(mode, root, codex, binary, outdir, sample, timeout, question, omp_fast):
-    task = prompt(mode, binary, question, omp_fast)
+def run_one(mode, root, codex, binary, outdir, sample, timeout, question, omp_fast, omp_session):
+    task = prompt(mode, binary, question, omp_fast, omp_session)
     (outdir / f"{sample}-{mode}-prompt.txt").write_text(task + "\n", encoding="utf-8")
     command = [codex, "exec", "--ephemeral", "--json", "--sandbox", "workspace-write",
                "--ignore-user-config"]
@@ -116,8 +127,9 @@ def run_one(mode, root, codex, binary, outdir, sample, timeout, question, omp_fa
     parsed.update({"mode": mode, "wall_seconds": elapsed, "exit_code": code, "timed_out": timed_out})
     parsed["policy_blocked"] = "blocked by policy" in stderr.lower()
     parsed["fast_command_count"] = sum(1 for c in parsed["commands"] if Path(binary).name.lower() in c["command"].lower() and "--fast" in c["command"])
+    parsed["session_command_count"] = sum(1 for c in parsed["commands"] if Path(binary).name.lower() in c["command"].lower() and re.search(r"\bsession\b", c["command"], re.I))
     parsed["compliant"] = code == 0 and bool(parsed["usage"]) and bool(answer.strip()) and parsed["command_count"] > 0 and not parsed["policy_blocked"] and not parsed["event_errors"] and (
-        parsed["omp_command_count"] == 0 if mode == "control" else parsed["omp_command_count"] > 0)
+        parsed["omp_command_count"] == 0 if mode == "control" else parsed["omp_command_count"] > 0 and (not omp_session or parsed["session_command_count"] > 0))
     return parsed
 
 
@@ -133,6 +145,7 @@ def main():
     ap.add_argument("--question", default=QUESTION, help="natural-language question for both arms")
     ap.add_argument("--first", choices=("control", "assisted"), default="control", help="first arm in pair 1; subsequent pairs reverse order")
     ap.add_argument("--omp-fast", action="store_true", help="ask assisted agent to use metadata freshness mode")
+    ap.add_argument("--omp-session", action="store_true", help="ask assisted agent to use the interactive JSONL session")
     args = ap.parse_args()
     if not 1 <= args.pairs <= 10 or not 30 <= args.timeout <= 900:
         ap.error("pairs must be 1..10 and timeout 30..900 seconds")
@@ -155,12 +168,12 @@ def main():
     for i in range(args.pairs):
         first = args.first if i % 2 == 0 else ("assisted" if args.first == "control" else "control")
         for mode in [first, "assisted" if first == "control" else "control"]:
-            result = run_one(mode, control if mode == "control" else assisted, codex, binary, output, i + 1, args.timeout, args.question, args.omp_fast)
+            result = run_one(mode, control if mode == "control" else assisted, codex, binary, output, i + 1, args.timeout, args.question, args.omp_fast, args.omp_session)
             results.append(result)
             print(f"pair {i+1} {mode}: {result['wall_seconds']:.2f}s, exit={result['exit_code']}, compliant={result['compliant']}, commands={result['command_count']}, omp={result['omp_command_count']}", flush=True)
     after = {"control": source_fingerprint(control), "assisted": source_fingerprint(assisted)}
     report = {"scope": "paired question-only agent pilot; answers require blinded source review",
-              "question": args.question, "omp_fast_requested": args.omp_fast, "omp_sha256": hashlib.sha256(Path(binary).read_bytes()).hexdigest(),
+              "question": args.question, "omp_fast_requested": args.omp_fast, "omp_session_requested": args.omp_session, "omp_sha256": hashlib.sha256(Path(binary).read_bytes()).hexdigest(),
               "codex_version": subprocess.run([codex, "--version"], capture_output=True, text=True).stdout.strip(),
               "source_before": before, "source_after": after,
               "sources_unchanged": before == after, "results": results}

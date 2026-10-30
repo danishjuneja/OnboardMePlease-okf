@@ -13,6 +13,7 @@ const help = `omp — local repository evidence for your agent
 
   omp update [--verify] [--json]
   omp status [--verbose] [--json]
+  omp session [--fast]  (JSON Lines over stdin/stdout)
   omp investigate "question" [--limit 3] [--fast] [--json]
   omp search "query" [--limit 10] [--fast] [--json]
   omp navigate "query" [--limit 10] [--direction both|incoming|outgoing]
@@ -57,6 +58,30 @@ func main() {
 	}
 	if len(pos) == 0 {
 		fmt.Print(help)
+		return
+	}
+	if pos[0] == "session" {
+		if len(pos) != 1 {
+			fail(jsonMode, "invalid_arguments")
+		}
+		for k := range flags {
+			if k != "--fast" {
+				fail(jsonMode, "invalid_flag: "+k)
+			}
+		}
+		w, err := engine.Discover()
+		if err != nil {
+			fail(jsonMode, err.Error())
+		}
+		s, err := engine.Open(w, false)
+		if err != nil {
+			fail(jsonMode, err.Error())
+		}
+		defer s.DB.Close()
+		s.Fast = flags["--fast"] != ""
+		if err = serveSession(s, os.Stdin, os.Stdout, engine.Discover); err != nil {
+			fail(false, err.Error())
+		}
 		return
 	}
 	r, e := run(pos, flags)

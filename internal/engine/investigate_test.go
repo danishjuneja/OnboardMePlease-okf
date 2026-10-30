@@ -129,6 +129,39 @@ func TestInvestigationRanksImplementationForNaturalLanguageFlow(t *testing.T) {
 	}
 }
 
+func TestInvestigationRanksDistinctiveConceptsAcrossFillerWords(t *testing.T) {
+	s, root := investigationStore(t)
+	files := map[string]string{
+		"src/workbench/quickaccess.ts":   "export function showCommands() { return MenuId.CommandPalette; }\n",
+		"extensions/commands/manager.ts": "export function commandManager() { return 'command selected get found executed'; }\n",
+		"generic/get.go":                 "package generic\nfunc get() {}\n",
+		"api/types.d.ts":                 "// command palette extension commands\nexport interface Clipboard {}\n",
+	}
+	for i := 0; i < 24; i++ {
+		files[fmt.Sprintf("generic%d/command.go", i)] = "package generic\nfunc Command() {}\n"
+	}
+	for p, body := range files {
+		name := filepath.Join(root, filepath.FromSlash(p))
+		if err := os.MkdirAll(filepath.Dir(name), 0755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(name, []byte(body), 0600); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if _, err := s.Update(false); err != nil {
+		t.Fatal(err)
+	}
+	r, err := s.Investigate("How does a command selected from the Command Palette get found and executed?", 3)
+	if err != nil {
+		t.Fatal(err)
+	}
+	sources := r.Data.(Investigation).Sources
+	if len(sources) == 0 || sources[0].Path != "src/workbench/quickaccess.ts" {
+		t.Fatalf("palette entry not ranked first: %#v", sources)
+	}
+}
+
 func TestInvestigationAndEvidenceBackedNote(t *testing.T) {
 	s, root := investigationStore(t)
 	res, err := s.Investigate("How does ExecuteAction work exactly?", 3)

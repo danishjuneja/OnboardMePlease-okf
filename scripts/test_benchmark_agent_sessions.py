@@ -28,6 +28,11 @@ class BenchmarkSessionTests(unittest.TestCase):
         self.assertIn("--fast", benchmark.prompt("assisted", "omp.exe", "question", True))
         self.assertNotIn("--fast", benchmark.prompt("control", "omp.exe", "question", True))
 
+    def test_session_prompt_preserves_question_and_requires_session(self):
+        task = benchmark.prompt("assisted", "omp.exe", "How does this work?", True, True)
+        self.assertIn("omp session --fast", task)
+        self.assertEqual(task.split("Question: ", 1)[1], "How does this work?")
+
 
 if __name__ == "__main__":
     unittest.main()

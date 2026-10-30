@@ -131,3 +131,50 @@ func TestFastFreshnessDoesNotClaimFullVerification(t *testing.T) {
 		t.Fatalf("full hash failed to detect change: %#v %v", full, err)
 	}
 }
+
+func TestInvestigationSessionLabelsUnverifiedChanges(t *testing.T) {
+	s, root := investigationStore(t)
+	if err := s.BeginSession(); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(root, "new.go"), []byte("package demo\n"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	r, err := s.Investigate("ExecuteAction", 3)
+	if err != nil {
+		t.Fatal(err)
+	}
+	r = s.SessionResult(r)
+	if r.Verification != "session_snapshot" || r.State != "partial" {
+		t.Fatalf("reused snapshot incorrectly presented as current: %#v", r)
+	}
+	if err = s.RefreshSession(); err == nil {
+		t.Fatal("refresh failed to detect an added file")
+	}
+}
+
+func TestInvestigationSessionRejectsChangedSourceAndGeneration(t *testing.T) {
+	s, root := investigationStore(t)
+	if err := s.BeginSession(); err != nil {
+		t.Fatal(err)
+	}
+	name := filepath.Join(root, "action.go")
+	if err := os.WriteFile(name, []byte("package demo\nfunc ExecuteAction() {}\n"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	r, err := s.Investigate("ExecuteAction", 3)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, source := range r.Data.(Investigation).Sources {
+		if source.Path == "action.go" {
+			t.Fatal("session returned a changed source")
+		}
+	}
+	if _, err := s.DB.Exec("UPDATE meta SET value='different-generation' WHERE key='generation'"); err != nil {
+		t.Fatal(err)
+	}
+	if fresh, err := s.Audit(); err != nil || fresh {
+		t.Fatalf("changed generation was not detected: %v %v", fresh, err)
+	}
+}

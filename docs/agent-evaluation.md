@@ -91,6 +91,12 @@ In both OMP sessions the first `investigate` result ranked unrelated extension c
 
 For new questions, pass `--question "..."`; use `--pairs 2` to reverse arm order between pairs, or `--first assisted` to start with OMP. Each run needs a new empty output directory. The benchmark question is passed to both agents; expected answers and source anchors should stay outside their prompts.
 
+### Session and ranking follow-up
+
+On the same VS Code snapshot and the same Command Palette question, a scripted three-step sequence (`investigate`, `search`, `evidence`) was run twice in opposite orders on a prebuilt index. Separate `--fast` calls took 44.19 s and 31.96 s; an `omp session --fast`, including its initial audit, took 16.25 s and 15.68 s. Session query time after that audit was about 1.8 s in each run. The two-sample mean fell from 38.08 s to 15.96 s, a 58% reduction for this particular scripted sequence, not a measurement of an agent's end-to-end speed. Index construction was excluded.
+
+These paths have different freshness guarantees: separate calls repeat the metadata inventory check; the session checks it once, verifies returned sources by content, and labels results as a session snapshot until refreshed. It cannot detect every repository change made after the initial check. The new ranking put the relevant Command Palette provider file second among three initial sources for this question, where it had previously been absent; the returned chunk was its configuration, not the execution method. This is one previously examined question, not a held-out ranking evaluation, and the first source was still not the principal execution entry point.
+
 ## Larger, multi-step flow checks
 
 `scripts/benchmark_real_flows.py` evaluates a Go analysis-checker flow in `golang.org/x/tools` v0.50.0 and a Scala produce-request flow in Kafka commit `cf4905dc7c9c595c60af9c80f238152e1a4b2ea5`. Prepare isolated Git worktrees with those exact source versions and run `omp update --json` separately before the benchmark. Set `OMP_SYNTAX_PYTHON` consistently if the optional adapter was enabled during indexing.

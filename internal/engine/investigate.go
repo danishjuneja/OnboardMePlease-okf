@@ -61,11 +61,28 @@ func excerpt(text string, max int) (string, bool) {
 	return text[:max], true
 }
 
+// Suppress question scaffolding when pairing concepts. Exact identifiers and
+// the original question remain available to the separate symbol search.
+func investigationTerms(question string) []string {
+	terms := queryTerms(question)
+	filler := map[string]bool{"selected": true, "get": true, "gets": true, "found": true, "executed": true, "including": true, "provided": true, "explain": true, "flow": true}
+	out := make([]string, 0, len(terms))
+	for _, term := range terms {
+		if !filler[term] {
+			out = append(out, term)
+		}
+	}
+	if len(out) == 0 {
+		return terms
+	}
+	return out
+}
+
 // Investigate accepts a question and ranks lexical leads; it does not infer intent.
 func (s *Store) Investigate(question string, limit int) (Envelope, error) {
 	out := Investigation{Sources: []InvestigationSource{}, Notes: []InvestigationNote{}, RelatedSources: []InvestigationSource{}, Relationships: []Edge{}}
 	r := s.Envelope("no_match", out)
-	terms := queryTerms(question)
+	terms := investigationTerms(question)
 	if limit < 1 || limit > 10 || len(terms) > 32 {
 		return r, fmt.Errorf("invalid_query: limit or question too large")
 	}
@@ -122,7 +139,29 @@ func (s *Store) Investigate(question string, limit int) (Envelope, error) {
 	// BM25's top OR matches can be dominated by common words in a question.
 	// Always include exact identifier matches before applying the result budget.
 	words := strings.FieldsFunc(question, func(r rune) bool { return !unicode.IsLetter(r) && !unicode.IsDigit(r) && r != '_' })
+	termSet := map[string]bool{}
+	for _, term := range terms {
+		termSet[term] = true
+	}
+	filteredWords := make([]string, 0, len(words))
+	seenWords := map[string]bool{}
+	for _, word := range words {
+		parts := strings.Fields(tokenize(word))
+		eligible := len(parts) > 0
+		for _, part := range parts {
+			if !termSet[part] {
+				eligible = false
+				break
+			}
+		}
+		if eligible && !seenWords[word] {
+			filteredWords = append(filteredWords, word)
+			seenWords[word] = true
+		}
+	}
+	words = filteredWords
 	seen := map[string]bool{}
+	pairBonus := map[string]int{}
 	for _, c := range candidates {
 		seen[c.id] = true
 	}
@@ -133,6 +172,7 @@ func (s *Store) Investigate(question string, limit int) (Envelope, error) {
 		if e != nil {
 			return r, e
 		}
+		rank := 0
 		for matches.Next() {
 			var c candidate
 			if e = matches.Scan(&c.id, &c.kind); e != nil {
@@ -142,6 +182,15 @@ func (s *Store) Investigate(question string, limit int) (Envelope, error) {
 				candidates = append(candidates, c)
 				seen[c.id] = true
 			}
+			base := 10
+			if i == 0 {
+				base = 30
+			}
+			bonus := base / (1 + rank/5)
+			if bonus > pairBonus[c.id] {
+				pairBonus[c.id] = bonus
+			}
+			rank++
 		}
 		if e == nil {
 			e = matches.Err()
@@ -154,6 +203,7 @@ func (s *Store) Investigate(question string, limit int) (Envelope, error) {
 	if len(words) > 32 {
 		words = words[:32]
 	}
+	commonSymbols := map[string]bool{}
 	for _, word := range words {
 		if len([]rune(word)) < 3 {
 			continue
@@ -162,6 +212,7 @@ func (s *Store) Investigate(question string, limit int) (Envelope, error) {
 		if e != nil {
 			return r, e
 		}
+		matchCount := 0
 		for matches.Next() {
 			var id string
 			if e = matches.Scan(&id); e != nil {
@@ -171,6 +222,7 @@ func (s *Store) Investigate(question string, limit int) (Envelope, error) {
 				candidates = append(candidates, candidate{id, "source"})
 				seen[id] = true
 			}
+			matchCount++
 		}
 		if e == nil {
 			e = matches.Err()
@@ -179,6 +231,7 @@ func (s *Store) Investigate(question string, limit int) (Envelope, error) {
 		if e != nil {
 			return r, e
 		}
+		commonSymbols[word] = matchCount >= 3 && len(terms) > 1
 		if unicode.IsUpper([]rune(word)[0]) {
 			identifierTerms := strings.Fields(tokenize(word))
 			if len(identifierTerms) > 0 {
@@ -239,7 +292,7 @@ func (s *Store) Investigate(question string, limit int) (Envelope, error) {
 		}
 		tokens := " " + tokenize(chunk.Path+" "+chunk.Symbol+" "+chunk.Text) + " "
 		contentTokens := " " + tokenize(chunk.Symbol+" "+chunk.Text) + " "
-		score := 0
+		score := pairBonus[c.id]
 		for _, term := range terms {
 			for _, variant := range variants[term] {
 				if strings.Contains(tokens, " "+variant+" ") {
@@ -260,7 +313,11 @@ func (s *Store) Investigate(question string, limit int) (Envelope, error) {
 			for _, left := range variants[terms[i]] {
 				for _, right := range variants[terms[i+1]] {
 					if strings.Contains(contentTokens, " "+left+" "+right+" ") {
-						score += 10
+						bonus := 8
+						if i == 0 {
+							bonus = 25
+						}
+						score += bonus
 					}
 				}
 			}
@@ -276,17 +333,23 @@ func (s *Store) Investigate(question string, limit int) (Envelope, error) {
 		if strings.HasPrefix(chunk.Path, ".github/") {
 			score -= 8
 		}
+		if strings.HasSuffix(lowerPath, ".d.ts") && !strings.Contains(questionTokens, " type ") && !strings.Contains(questionTokens, " interface ") && !strings.Contains(questionTokens, " api ") {
+			score -= 20
+		}
+		if chunk.Symbol == "constructor" && !strings.Contains(questionTokens, " constructor ") {
+			score -= 12
+		}
 		if (strings.HasSuffix(lowerPath, "/doc.go") || lowerPath == "doc.go") && !strings.Contains(questionTokens, " documentation ") && !strings.Contains(questionTokens, " docs ") {
 			score -= 25
 		}
 		for _, word := range words {
-			if unicode.IsUpper([]rune(word)[0]) && (strings.Contains(chunk.Text, "type "+word+" ") || strings.Contains(chunk.Text, "class "+word) || strings.Contains(chunk.Text, "interface "+word)) {
+			if !commonSymbols[word] && unicode.IsUpper([]rune(word)[0]) && (strings.Contains(chunk.Text, "type "+word+" ") || strings.Contains(chunk.Text, "class "+word) || strings.Contains(chunk.Text, "interface "+word)) {
 				score += 60
 			}
 		}
 		if chunk.Symbol != "" && strings.Contains(questionTokens, " "+tokenize(chunk.Symbol)+" ") {
 			for _, word := range words {
-				if word == chunk.Symbol {
+				if word == chunk.Symbol && !commonSymbols[word] {
 					score += 30
 					break
 				}
@@ -295,21 +358,29 @@ func (s *Store) Investigate(question string, limit int) (Envelope, error) {
 		rankedSources = append(rankedSources, ranked{chunk, score})
 	}
 	sort.SliceStable(rankedSources, func(i, j int) bool { return rankedSources[i].score > rankedSources[j].score })
-	for _, item := range rankedSources {
-		if len(out.Sources) >= limit {
-			r.Truncated = true
-			break
-		}
-		c := item.chunk
-		if !s.W.Current(c) {
-			r.State = "partial"
-			r.Reasons = append(r.Reasons, "stale_candidates_removed")
-			continue
-		}
-		text, truncated := excerpt(c.Text, 1200)
-		out.Sources = append(out.Sources, InvestigationSource{c.ID, c.Path, c.Symbol, c.Start, c.End, text, truncated})
-		if truncated {
-			r.Truncated = true
+	seenPaths, checked := map[string]bool{}, map[string]bool{}
+	for pass := 0; pass < 2; pass++ {
+		for _, item := range rankedSources {
+			c := item.chunk
+			if checked[c.ID] || (pass == 0 && seenPaths[c.Path]) {
+				continue
+			}
+			if len(out.Sources) >= limit {
+				r.Truncated = true
+				break
+			}
+			checked[c.ID] = true
+			if !s.W.Current(c) {
+				r.State = "partial"
+				r.Reasons = append(r.Reasons, "stale_candidates_removed")
+				continue
+			}
+			seenPaths[c.Path] = true
+			text, truncated := excerpt(c.Text, 1200)
+			out.Sources = append(out.Sources, InvestigationSource{c.ID, c.Path, c.Symbol, c.Start, c.End, text, truncated})
+			if truncated {
+				r.Truncated = true
+			}
 		}
 	}
 	if len(out.Sources) > 0 {
